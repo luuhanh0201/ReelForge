@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "types": ["vitest/globals", "node"],
+    // `supertest` là package CJS không khai báo "exports" nên subpath
+    // `supertest/types` không resolve được ở ESM mode của nodenext.
+    // Trỏ thẳng vào file declaration của @types/supertest.
+    "paths": {
+      "supertest/types": ["./node_modules/@types/supertest/types.d.ts"]
+    }
+  }
+}

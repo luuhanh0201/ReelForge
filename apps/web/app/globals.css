@@ -1,50 +1,114 @@
+@import "tailwindcss";
+
+@source "../app";
+@source "../components";
+@source "../config";
+
+/* Theme switcher dùng class trên <html> thay vì prefers-color-scheme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Light Mode Palette (mặc định) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #f8fafc;
+  --surface: #ffffff;
+  --subtle: #f1f5f9;
+  --line: #e2e8f0;
+  --ink: #0f172a;
+  --muted: #64748b;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Dark Mode Palette */
+.dark {
+  --canvas: #10151e;
+  --surface: #19202c;
+  --subtle: #222b39;
+  --line: #2e3846;
+  --ink: #e7ecf4;
+  --muted: #8a95a8;
+}
+
+@theme inline {
+  /* Solid brand colors - tuyệt đối không dùng gradient */
+  --color-brand: #ff6b35;
+  --color-mint: #35c48f;
+  --color-amber: #f2b237;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+
+  /* Toàn trang dùng chung Be Vietnam Pro, phân cấp bằng weight. */
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-btn: 6px;
+  --radius-card: 12px;
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
   }
-}
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-}
-
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.imgDark {
-  display: none;
-}
-
-@media (prefers-color-scheme: dark) {
   html {
-    color-scheme: dark;
+    scroll-behavior: smooth;
+    scroll-padding-top: 88px;
   }
 
-  .imgLight {
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: #ff6b35;
+    color: #10151e;
+  }
+
+  :focus-visible {
+    outline: 2px solid #ff6b35;
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Bề mặt thẻ sáng lên tại vị trí con trỏ (Interactive Spotlight Cards) */
+  .spotlight-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 240ms ease;
+    pointer-events: none;
+    background: radial-gradient(
+      260px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      color-mix(in srgb, var(--spotlight-color, #ff6b35) 16%, transparent),
+      transparent 70%
+    );
+  }
+
+  .spotlight-surface:hover::before {
+    opacity: 1;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
-  .imgDark {
-    display: unset;
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
   }
 }
