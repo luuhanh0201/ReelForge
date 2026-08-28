@@ -32,7 +32,7 @@ export function FinalCtaSection() {
           <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <button
               type="button"
-              onClick={openAuth}
+              onClick={() => openAuth("signup")}
               className="inline-flex w-full items-center justify-center gap-2 rounded-btn bg-brand px-6 py-3 text-sm font-bold text-[#10151e] transition-transform hover:-translate-y-0.5 sm:w-auto"
             >
               {t(FINAL_CTA.primaryCta)}

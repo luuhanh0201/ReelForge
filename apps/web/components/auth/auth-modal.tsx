@@ -1,23 +1,27 @@
 "use client";
 
-import { Coins, Lock, Mail, ShieldCheck, X } from "lucide-react";
+import { Coins, Lock, Mail, ShieldCheck, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { AUTH_MODAL, type AuthMode } from "@/config/content.config";
 import { AUTH_CONFIG, SITE } from "@/config/site.config";
 import { useApp } from "@/lib/app-provider";
 import { L } from "@/lib/i18n";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 
-const PERKS = [
-  L("Xuất video 1080p không watermark", "1080p export with no watermark"),
-  L("Toàn bộ giọng đọc AI cao cấp", "Every premium AI voice"),
-  L("Ưu tiên hàng đợi render", "Priority render queue"),
-];
+const FIELD =
+  "flex items-center gap-2 rounded-btn border border-line bg-surface px-3 focus-within:border-brand/50";
+const INPUT =
+  "h-11 w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted";
 
 export function AuthModal() {
-  const { t, authOpen, closeAuth, signInWithEmail, googleStatus } = useApp();
+  const { t, authOpen, authMode, setAuthMode, closeAuth, signInWithEmail, googleStatus } =
+    useApp();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
+  const copy = AUTH_MODAL.modes[authMode];
+  const isSignUp = authMode === "signup";
 
   // Khoá cuộn nền + đóng bằng phím Esc khi modal đang mở.
   useEffect(() => {
@@ -38,10 +42,10 @@ export function AuthModal() {
     };
   }, [authOpen, closeAuth]);
 
-  const handleEmailSubmit = (event: FormEvent) => {
+  const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!email.includes("@")) return;
-    signInWithEmail(email.trim());
+    signInWithEmail(email.trim(), isSignUp ? name : undefined);
   };
 
   return (
@@ -61,7 +65,7 @@ export function AuthModal() {
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
-            aria-label={t(L("Đăng nhập ReelForge", "Sign in to ReelForge"))}
+            aria-label={t(copy.title)}
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -81,83 +85,136 @@ export function AuthModal() {
               {SITE.logoLetter}
             </span>
 
-            <h2 className="mt-4 font-display text-xl font-bold text-ink">
-              {t(L("Bắt đầu với ReelForge", "Get started with ReelForge"))}
-            </h2>
-            <p className="mt-1.5 text-sm text-muted">
-              {t(
-                L(
-                  `Đăng nhập bằng Google để nhận ngay ${AUTH_CONFIG.googleBonusCredits} Credits và huy hiệu Pro.`,
-                  `Sign in with Google to instantly get ${AUTH_CONFIG.googleBonusCredits} credits and a Pro badge.`,
-                ),
-              )}
-            </p>
+            {/* Chuyển giữa Đăng nhập và Đăng ký */}
+            <div
+              role="tablist"
+              className="mt-5 inline-flex w-full items-center gap-1 rounded-btn border border-line bg-surface p-1"
+            >
+              {(Object.keys(AUTH_MODAL.modes) as AuthMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={authMode === mode}
+                  onClick={() => setAuthMode(mode)}
+                  className={`h-9 flex-1 rounded-[4px] text-sm font-semibold transition-colors ${
+                    authMode === mode
+                      ? "bg-brand text-[#10151e]"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  {t(AUTH_MODAL.modes[mode].tab)}
+                </button>
+              ))}
+            </div>
+
+            <h2 className="mt-5 font-display text-xl font-bold text-ink">{t(copy.title)}</h2>
+            <p className="mt-1.5 text-sm text-muted">{t(copy.description)}</p>
 
             {/* Vị trí ưu tiên cao nhất: Google Sign-In nằm trên form truyền thống */}
             <div className="mt-5">
               <GoogleSignInButton />
             </div>
 
-            <ul className="mt-4 flex flex-col gap-2">
-              {PERKS.map((perk) => (
-                <li key={perk.en} className="flex items-center gap-2 text-xs text-muted">
-                  <ShieldCheck size={14} className="shrink-0 text-mint" />
-                  {t(perk)}
-                </li>
-              ))}
-            </ul>
+            {isSignUp ? (
+              <ul className="mt-4 flex flex-col gap-2">
+                {AUTH_MODAL.perks.map((perk) => (
+                  <li key={perk.en} className="flex items-center gap-2 text-xs text-muted">
+                    <ShieldCheck size={14} className="shrink-0 text-mint" />
+                    {t(perk)}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
 
             <div className="my-5 flex items-center gap-3">
               <span className="h-px flex-1 bg-line" />
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-                {t(L("hoặc dùng email", "or use email"))}
+                {t(AUTH_MODAL.divider)}
               </span>
               <span className="h-px flex-1 bg-line" />
             </div>
 
-            <form onSubmit={handleEmailSubmit} className="flex flex-col gap-3">
-              <label className="flex items-center gap-2 rounded-btn border border-line bg-surface px-3">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+              {isSignUp ? (
+                <label className={FIELD}>
+                  <User size={16} className="shrink-0 text-muted" />
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder={t(AUTH_MODAL.fields.name)}
+                    aria-label={t(AUTH_MODAL.fields.name)}
+                    className={INPUT}
+                  />
+                </label>
+              ) : null}
+
+              <label className={FIELD}>
                 <Mail size={16} className="shrink-0 text-muted" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder={t(L("Email của bạn", "Your email"))}
-                  aria-label={t(L("Email của bạn", "Your email"))}
-                  className="h-11 w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+                  placeholder={t(AUTH_MODAL.fields.email)}
+                  aria-label={t(AUTH_MODAL.fields.email)}
+                  className={INPUT}
                 />
               </label>
 
-              <label className="flex items-center gap-2 rounded-btn border border-line bg-surface px-3">
+              <label className={FIELD}>
                 <Lock size={16} className="shrink-0 text-muted" />
                 <input
                   type="password"
                   required
-                  minLength={6}
-                  placeholder={t(L("Mật khẩu", "Password"))}
-                  aria-label={t(L("Mật khẩu", "Password"))}
-                  className="h-11 w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+                  minLength={AUTH_MODAL.passwordMinLength}
+                  placeholder={t(AUTH_MODAL.fields.password)}
+                  aria-label={t(AUTH_MODAL.fields.password)}
+                  className={INPUT}
                 />
               </label>
+
+              {isSignUp ? null : (
+                <button
+                  type="button"
+                  className="-mt-1 self-end text-xs font-medium text-muted transition-colors hover:text-brand"
+                >
+                  {t(AUTH_MODAL.forgotPassword)}
+                </button>
+              )}
 
               <button
                 type="submit"
                 disabled={googleStatus === "connecting"}
                 className="h-11 rounded-btn border border-line bg-subtle text-sm font-bold text-ink transition-colors hover:border-brand/45 disabled:opacity-60"
               >
-                {t(L("Tạo tài khoản bằng email", "Create account with email"))}
+                {t(copy.submit)}
               </button>
             </form>
 
-            <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted">
-              <Coins size={13} className="text-mint" />
-              {t(
-                L(
-                  `Đăng ký bằng email nhận ${AUTH_CONFIG.emailSignupCredits} Credits`,
-                  `Email signup gets ${AUTH_CONFIG.emailSignupCredits} credits`,
-                ),
-              )}
+            {isSignUp ? (
+              <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted">
+                <Coins size={13} className="text-mint" />
+                {t(
+                  L(
+                    `Đăng ký bằng email nhận ${AUTH_CONFIG.emailSignupCredits} Credits`,
+                    `Email signup gets ${AUTH_CONFIG.emailSignupCredits} credits`,
+                  ),
+                )}
+              </p>
+            ) : null}
+
+            <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted">
+              {t(copy.switchHint)}
+              <button
+                type="button"
+                onClick={() => setAuthMode(isSignUp ? "signin" : "signup")}
+                className="font-semibold text-brand transition-opacity hover:opacity-80"
+              >
+                {t(copy.switchAction)}
+              </button>
             </p>
           </motion.div>
         </motion.div>

@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import type { AuthMode } from "@/config/content.config";
 import { AUTH_CONFIG } from "@/config/site.config";
 import { translate, type Locale, type Localized } from "@/lib/i18n";
 import {
@@ -45,11 +46,15 @@ interface AppContextValue {
   toggleTheme: () => void;
   user: DemoUser | null;
   authOpen: boolean;
-  openAuth: () => void;
+  /** Modal mở ở chế độ đăng nhập hay đăng ký. */
+  authMode: AuthMode;
+  openAuth: (mode?: AuthMode) => void;
+  setAuthMode: (mode: AuthMode) => void;
   closeAuth: () => void;
   googleStatus: GoogleAuthStatus;
   signInWithGoogle: () => void;
-  signInWithEmail: (email: string) => void;
+  /** `name` chỉ có ở luồng đăng ký; đăng nhập thì lấy phần trước @ của email. */
+  signInWithEmail: (email: string, name?: string) => void;
   signOut: () => void;
 }
 
@@ -63,6 +68,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   const [user, setUser] = useState<DemoUser | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [googleStatus, setGoogleStatus] = useState<GoogleAuthStatus>("idle");
   const connectTimer = useRef<number | null>(null);
 
@@ -92,7 +98,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [theme],
   );
 
-  const openAuth = useCallback(() => setAuthOpen(true), []);
+  const openAuth = useCallback((mode: AuthMode = "signin") => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  }, []);
   const closeAuth = useCallback(() => setAuthOpen(false), []);
 
   /**
@@ -116,10 +125,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, AUTH_CONFIG.connectDelayMs);
   }, []);
 
-  const signInWithEmail = useCallback((email: string) => {
+  const signInWithEmail = useCallback((email: string, name?: string) => {
     const [handle] = email.split("@");
     setUser({
-      name: handle ? handle.slice(0, 24) : "Creator",
+      name: name?.trim() || (handle ? handle.slice(0, 24) : "Creator"),
       email,
       credits: AUTH_CONFIG.emailSignupCredits,
       plan: "free",
@@ -139,7 +148,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleTheme,
       user,
       authOpen,
+      authMode,
       openAuth,
+      setAuthMode,
       closeAuth,
       googleStatus,
       signInWithGoogle,
@@ -153,6 +164,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleTheme,
       user,
       authOpen,
+      authMode,
       openAuth,
       closeAuth,
       googleStatus,

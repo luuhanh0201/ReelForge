@@ -1,11 +1,16 @@
 import {
+  ArrowLeft,
   Award,
+  FolderOpen,
   BadgePercent,
   Captions,
   Clapperboard,
   Gauge,
+  Home,
   Layers,
+  LockKeyhole,
   Mic,
+  TriangleAlert,
   ScanSearch,
   ShieldCheck,
   Sparkles,
@@ -752,6 +757,140 @@ export const FAQS: { id: string; question: Localized; answer: Localized }[] = [
     ),
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Auth modal                                                          */
+/* ------------------------------------------------------------------ */
+
+export type AuthMode = "signin" | "signup";
+
+export const AUTH_MODAL = {
+  modes: {
+    signin: {
+      tab: L("Đăng nhập", "Sign in"),
+      title: L("Chào mừng trở lại", "Welcome back"),
+      description: L(
+        "Đăng nhập một chạm bằng Google, hoặc dùng email bạn đã đăng ký.",
+        "Sign in with Google in one tap, or use the email you registered with.",
+      ),
+      submit: L("Đăng nhập", "Sign in"),
+      switchHint: L("Chưa có tài khoản?", "New to ReelForge?"),
+      switchAction: L("Đăng ký ngay", "Create one"),
+    },
+    signup: {
+      tab: L("Đăng ký", "Sign up"),
+      title: L("Bắt đầu với ReelForge", "Get started with ReelForge"),
+      description: L(
+        "Tạo tài khoản trong 30 giây và nhận credits dùng thử ngay.",
+        "Create an account in 30 seconds and get trial credits right away.",
+      ),
+      submit: L("Tạo tài khoản bằng email", "Create account with email"),
+      switchHint: L("Đã có tài khoản?", "Already have an account?"),
+      switchAction: L("Đăng nhập", "Sign in"),
+    },
+  },
+  fields: {
+    name: L("Tên hiển thị", "Display name"),
+    email: L("Email của bạn", "Your email"),
+    password: L("Mật khẩu", "Password"),
+  },
+  passwordMinLength: 6,
+  forgotPassword: L("Quên mật khẩu?", "Forgot password?"),
+  divider: L("hoặc dùng email", "or use email"),
+  perks: [
+    L("Xuất video 1080p không watermark", "1080p export with no watermark"),
+    L("Toàn bộ giọng đọc AI cao cấp", "Every premium AI voice"),
+    L("Ưu tiên hàng đợi render", "Priority render queue"),
+  ],
+} as const;
+
+/* ------------------------------------------------------------------ */
+/* Trang trạng thái: 404 và 403                                         */
+/* ------------------------------------------------------------------ */
+
+export interface StatusPage {
+  code: string;
+  icon: LucideIcon;
+  accent: "brand" | "mint" | "amber";
+  eyebrow: Localized;
+  title: Localized;
+  description: Localized;
+  primaryLabel: Localized;
+  secondaryLabel: Localized;
+}
+
+export type StatusPageKey = "notFound" | "forbidden";
+
+export const STATUS_PAGES: Record<StatusPageKey, StatusPage> = {
+  notFound: {
+    code: "404",
+    icon: TriangleAlert,
+    accent: "brand",
+    eyebrow: L(
+      "Mã lỗi 404 • Tuyến đường không tồn tại",
+      "Error 404 • Route does not exist",
+    ),
+    title: L(
+      "Lạc mất kịch bản dựng video!",
+      "This video script got lost!",
+    ),
+    description: L(
+      "Khung hình bạn tìm không có trong cuộn phim. Có thể link đã cũ, gõ sai hoặc dự án đã bị xoá — chọn một lối quay lại bên dưới để tiếp tục công việc.",
+      "The frame you are looking for is not on this reel. The link may be outdated, mistyped, or the project was deleted — pick a way back below and keep working.",
+    ),
+    primaryLabel: L("Quay lại trang trước", "Go back"),
+    secondaryLabel: L("Về Trang chủ", "Back to home"),
+  },
+  forbidden: {
+    code: "403",
+    icon: LockKeyhole,
+    accent: "amber",
+    eyebrow: L("KHÔNG ĐỦ QUYỀN TRUY CẬP", "ACCESS NOT ALLOWED"),
+    title: L(
+      "Khu vực này cần đăng nhập",
+      "This area requires an account",
+    ),
+    description: L(
+      "Studio là khu vực riêng của tài khoản ReelForge. Đăng nhập để mở toàn bộ tính năng dựng video và quản lý credits.",
+      "Studio is a private area for ReelForge accounts. Sign in to unlock the full video editor and manage your credits.",
+    ),
+    primaryLabel: L("Đăng nhập để tiếp tục", "Sign in to continue"),
+    secondaryLabel: L("Về trang chủ", "Back to home"),
+  },
+};
+
+export const STATUS_PAGE_UI = {
+  backIcon: ArrowLeft,
+  homeIcon: Home,
+  studioIcon: FolderOpen,
+  quickLinksLabel: L("Hoặc đi tới:", "Or jump to:"),
+  /** Nút thứ ba trong cụm hành động khôi phục (docs: Tertiary). */
+  studioLabel: L("Vào Studio", "Open Studio"),
+} as const;
+
+/** Khung cuộn phim 404 — xem .agent/ui/not-found.md mục 2.2. */
+export const NOT_FOUND_FRAME = {
+  perforationCount: 7,
+  primaryTag: "FRAME MISSING",
+  secondaryTag: "NOT_FOUND",
+  caption: L("Khung hình bị thiếu", "Missing frame"),
+} as const;
+
+/* ------------------------------------------------------------------ */
+/* Studio (private route)                                              */
+/* ------------------------------------------------------------------ */
+
+export const STUDIO = {
+  eyebrow: L("STUDIO", "STUDIO"),
+  title: L("Chào mừng trở lại", "Welcome back"),
+  description: L(
+    "Trình dựng video đang được hoàn thiện. Trong lúc chờ, credits của bạn vẫn được giữ nguyên trong tài khoản.",
+    "The video editor is still being built. Your credits stay safe in your account in the meantime.",
+  ),
+  creditsLabel: L("Credits khả dụng", "Available credits"),
+  planLabel: L("Gói hiện tại", "Current plan"),
+  backLabel: L("Về trang chủ", "Back to home"),
+} as const;
 
 /* ------------------------------------------------------------------ */
 /* CTA cuối trang + Footer                                             */

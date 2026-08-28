@@ -228,7 +228,7 @@ export function SandboxSection() {
                 ) : (
                   <button
                     type="button"
-                    onClick={openAuth}
+                    onClick={() => openAuth("signin")}
                     className="inline-flex items-center justify-center gap-2 rounded-btn bg-brand px-5 py-3 text-sm font-bold text-[#10151e] transition-transform hover:-translate-y-0.5"
                   >
                     <Sparkles size={16} />

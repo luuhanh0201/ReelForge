@@ -167,7 +167,7 @@ export function SiteHeader() {
           ) : (
             <button
               type="button"
-              onClick={openAuth}
+              onClick={() => openAuth("signin")}
               className="hidden whitespace-nowrap rounded-btn border border-line bg-surface px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand/45 hover:bg-subtle sm:inline-flex"
             >
               {t(L("Đăng nhập", "Sign in"))}

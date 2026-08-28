@@ -117,7 +117,7 @@ export function PricingSection() {
 
                   <button
                     type="button"
-                    onClick={openAuth}
+                    onClick={() => openAuth("signup")}
                     className={`mt-6 w-full shrink-0 rounded-btn px-4 py-2.5 text-sm font-bold transition-transform hover:-translate-y-0.5 ${
                       plan.highlighted
                         ? "bg-brand text-[#10151e]"

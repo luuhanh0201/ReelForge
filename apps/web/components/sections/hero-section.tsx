@@ -248,7 +248,7 @@ export function HeroSection() {
           ) : (
             <button
               type="button"
-              onClick={openAuth}
+              onClick={() => openAuth("signin")}
               className="inline-flex items-center gap-2 text-sm font-semibold text-brand transition-transform hover:translate-x-0.5"
             >
               {t(L("Đăng nhập để mở Studio", "Sign in to open Studio"))}

@@ -38,3 +38,9 @@ yarn-error.log*
 *.pem
 AGENTS.MD
 .agent
+
+# Markdown
+*.md
+*.MD
+!apps/web/public/products/CREDITS.md
+tsconfig.build.tsbuildinfo
