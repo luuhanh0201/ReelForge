@@ -1,3 +1,39 @@
+# ReelForge API
+
+## Chạy local
+
+```bash
+# 1. Hạ tầng (PostgreSQL cổng 5433, Redis cổng 6379)
+docker compose up -d
+
+# 2. Biến môi trường
+cp .env.example .env
+
+# 3. Chạy API (hoặc `pnpm dev` ở root để chạy cả web lẫn api)
+pnpm start:dev
+```
+
+Kiểm tra kết nối: `curl http://localhost:3001/health`
+
+```json
+{ "status": "ok", "uptimeSeconds": 12, "dependencies": { "database": "up", "redis": "up" } }
+```
+
+## Cấu trúc hạ tầng
+
+| Thư mục | Vai trò |
+| :--- | :--- |
+| `src/config/configuration.ts` | Nguồn sự thật cho mọi biến môi trường (có validate biến bắt buộc) |
+| `src/database/` | `TypeOrmModule.forRootAsync` — PostgreSQL, `autoLoadEntities`, migration ở `dist/migrations` |
+| `src/redis/` | Client `ioredis` (token `REDIS_CLIENT`) + `CacheModule` lưu qua Keyv trên cùng Redis |
+| `src/health/` | `GET /health` ping database và Redis |
+| `src/common/` | Exception filter chuẩn hoá JSON lỗi, `BusinessException`, `ERROR_CODES` |
+
+- `DB_SYNCHRONIZE=true` chỉ dùng ở dev. Production phải chạy migration.
+- Entity của từng feature đăng ký bằng `TypeOrmModule.forFeature([...])`, không cần khai báo tập trung.
+
+---
+
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>

@@ -30,8 +30,14 @@
 @theme inline {
   /* Solid brand colors - tuyệt đối không dùng gradient */
   --color-brand: #ff6b35;
+  --color-brand-hover: #ff8f50;
   --color-mint: #35c48f;
   --color-amber: #f2b237;
+
+  /* Màu trạng thái nghiệp vụ (dùng ở admin, luôn đi kèm icon + nhãn) */
+  --color-danger: #f2545b;
+  --color-info: #3b82f6;
+  --color-voice: #a855f7;
 
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
