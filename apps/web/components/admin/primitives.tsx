@@ -1,8 +1,17 @@
 "use client";
 
-import { AlertTriangle, ChevronDown, CircleHelp, ShieldCheck, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleHelp,
+  ShieldCheck,
+  XCircle,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { ACCENT, type Accent } from "@/lib/accent";
+import { PAGE_SIZES, type PaginationState } from "@/lib/admin/pagination";
 
 /* ------------------------------------------------------------------ */
 /* Khung thẻ chuẩn của admin (rounded-12, p-5)                          */
@@ -88,10 +97,15 @@ export function Pill({
   className = "",
 }: {
   children: ReactNode;
-  accent?: Accent;
+  /** "neutral" dùng cho trạng thái không mang sắc thái tốt/xấu (ví dụ: không có tải). */
+  accent?: Accent | "neutral";
   className?: string;
 }) {
-  const tone = ACCENT[accent];
+  const tone =
+    accent === "neutral"
+      ? { border: "border-line", softBg: "bg-subtle", text: "text-muted" }
+      : ACCENT[accent];
+
   return (
     <span
       className={`inline-flex items-center whitespace-nowrap rounded-btn border px-2 py-0.5 text-[11px] font-bold ${tone.border} ${tone.softBg} ${tone.text} ${className}`}
@@ -302,4 +316,67 @@ export function TableCell({
   className?: string;
 }) {
   return <td className={`px-4 py-3 align-middle text-ink ${className}`}>{children}</td>;
+}
+
+/**
+ * Thanh phân trang đặt ngay dưới `DataTable`, trong cùng thẻ với bảng.
+ * Trạng thái do `usePagination` giữ; component này chỉ hiển thị và phát sự kiện.
+ */
+export function TablePagination({
+  pagination,
+  unit = "dòng",
+}: {
+  pagination: PaginationState;
+  unit?: string;
+}) {
+  const { page, pageCount, pageSize, total, from, to, setPage, setPageSize } = pagination;
+  const number = (value: number) => value.toLocaleString("vi-VN");
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line p-3">
+      <div className="flex items-center gap-2">
+        <AdminSelect
+          ariaLabel="Số dòng mỗi trang"
+          value={String(pageSize)}
+          onChange={(value) => setPageSize(Number(value))}
+          options={PAGE_SIZES.map((size) => ({
+            id: String(size),
+            label: `${size} ${unit}/trang`,
+          }))}
+        />
+
+        <p className="font-mono text-[11px] text-muted">
+          {total === 0
+            ? `0 ${unit}`
+            : `${number(from)}–${number(to)} / ${number(total)} ${unit}`}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <AdminButton
+          variant="ghost"
+          className="h-9 w-9 px-0"
+          disabled={page <= 1}
+          onClick={() => setPage(page - 1)}
+        >
+          <ChevronLeft size={17} />
+          <span className="sr-only">Trang trước</span>
+        </AdminButton>
+
+        <span className="whitespace-nowrap px-1 font-mono text-xs font-semibold text-ink">
+          Trang {number(page)} / {number(pageCount)}
+        </span>
+
+        <AdminButton
+          variant="ghost"
+          className="h-9 w-9 px-0"
+          disabled={page >= pageCount}
+          onClick={() => setPage(page + 1)}
+        >
+          <ChevronRight size={17} />
+          <span className="sr-only">Trang sau</span>
+        </AdminButton>
+      </div>
+    </div>
+  );
 }

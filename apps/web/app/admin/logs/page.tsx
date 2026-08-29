@@ -2,11 +2,9 @@
 
 import { Download, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import {
-  AUDIT_LOGS,
-  LOG_LEVEL_LABEL,
-  type LogLevel,
-} from "@/config/admin/infra.config";
+import { AUDIT_LOGS, LOG_LEVEL_LABEL, type LogLevel } from "@/config/admin/infra.config";
+import { useAuditLogs } from "@/lib/admin/audit-store";
+import { usePagination } from "@/lib/admin/pagination";
 import {
   AdminButton,
   AdminCard,
@@ -17,6 +15,7 @@ import {
   Pill,
   StatusBadge,
   TableCell,
+  TablePagination,
   TableRow,
 } from "@/components/admin/primitives";
 import { useToast } from "@/components/admin/toast";
@@ -45,13 +44,14 @@ const download = (filename: string, content: string, type: string) => {
 
 export default function LogsPage() {
   const toast = useToast();
+  const auditLogs = useAuditLogs();
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<LevelFilter>("all");
   const [admin, setAdmin] = useState<string>("all");
 
   const filtered = useMemo(
     () =>
-      AUDIT_LOGS.filter((log) => {
+      auditLogs.filter((log) => {
         const keyword = query.trim().toLowerCase();
         const matchQuery =
           keyword === "" ||
@@ -65,8 +65,10 @@ export default function LogsPage() {
           (admin === "all" || log.admin === admin)
         );
       }),
-    [query, level, admin],
+    [auditLogs, query, level, admin],
   );
+
+  const pagination = usePagination(filtered);
 
   const exportAs = (format: "csv" | "json") => {
     if (format === "json") {
@@ -141,7 +143,7 @@ export default function LogsPage() {
           headers={["Thời gian", "Admin", "Hành động", "Đối tượng", "IP", "Mức độ", "Kết quả"]}
           isEmpty={filtered.length === 0}
         >
-          {filtered.map((log) => (
+          {pagination.items.map((log) => (
             <TableRow key={log.id}>
               <TableCell className="whitespace-nowrap font-mono text-xs text-muted">
                 {log.timestamp}
@@ -168,6 +170,8 @@ export default function LogsPage() {
             </TableRow>
           ))}
         </DataTable>
+
+        <TablePagination pagination={pagination} unit="bản ghi" />
       </AdminCard>
     </>
   );

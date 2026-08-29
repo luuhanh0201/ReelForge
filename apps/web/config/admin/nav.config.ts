@@ -10,6 +10,8 @@ import {
   Shuffle,
   Users,
   Clapperboard,
+  Database,
+  HardDrive,
   type LucideIcon,
 } from "lucide-react";
 
@@ -106,6 +108,19 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     id: "infra",
     title: "Hạ tầng & Kiểm toán",
     items: [
+      {
+        id: "database",
+        label: "Cơ sở dữ liệu",
+        href: "/admin/database",
+        icon: Database,
+      },
+      {
+        id: "redis",
+        label: "Redis & Hàng đợi",
+        href: "/admin/redis",
+        icon: HardDrive,
+        badge: "3",
+      },
       {
         id: "api-keys",
         label: "API Keys & Webhooks",

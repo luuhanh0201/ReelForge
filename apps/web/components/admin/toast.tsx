@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Check, Info, X } from "lucide-react";
+import { AlertTriangle, Check, Info, X, XCircle } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   createContext,
@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 
-type ToastTone = "success" | "warning" | "info";
+type ToastTone = "success" | "warning" | "danger" | "info";
 
 interface ToastItem {
   id: number;
@@ -23,6 +23,7 @@ interface ToastItem {
 const TONE = {
   success: { icon: Check, className: "border-mint/40 text-mint" },
   warning: { icon: AlertTriangle, className: "border-amber/40 text-amber" },
+  danger: { icon: XCircle, className: "border-danger/40 text-danger" },
   info: { icon: Info, className: "border-info/40 text-info" },
 } as const;
 

@@ -8,6 +8,7 @@ import {
   type ApiKeyEntry,
   type KeyStatus,
 } from "@/config/admin/infra.config";
+import { usePagination } from "@/lib/admin/pagination";
 import {
   AdminButton,
   AdminCard,
@@ -16,6 +17,7 @@ import {
   DataTable,
   StatusBadge,
   TableCell,
+  TablePagination,
   TableRow,
   ToggleSwitch,
 } from "@/components/admin/primitives";
@@ -32,6 +34,8 @@ export default function ApiKeysPage() {
   const [keyDraft, setKeyDraft] = useState({ provider: "", scope: "", secret: "" });
   const [addHookOpen, setAddHookOpen] = useState(false);
   const [hookDraft, setHookDraft] = useState({ event: "", url: "" });
+
+  const pagination = usePagination(keys);
 
   const addKey = () => {
     if (keyDraft.provider.trim() === "" || keyDraft.secret.trim().length < 8) {
@@ -149,7 +153,7 @@ export default function ApiKeysPage() {
         </div>
 
         <DataTable headers={["Nhà cung cấp", "Khóa", "Xoay vòng", "Trạng thái", "Thao tác"]}>
-          {keys.map((entry) => (
+          {pagination.items.map((entry) => (
             <TableRow key={entry.id}>
               <TableCell>
                 <p className="text-sm font-semibold text-ink">{entry.provider}</p>
@@ -216,6 +220,8 @@ export default function ApiKeysPage() {
             </TableRow>
           ))}
         </DataTable>
+
+        <TablePagination pagination={pagination} unit="khóa" />
       </AdminCard>
 
       <AdminCard>

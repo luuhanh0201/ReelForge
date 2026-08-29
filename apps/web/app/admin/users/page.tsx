@@ -10,6 +10,7 @@ import {
   type UserPlan,
   type UserRole,
 } from "@/config/admin/accounts.config";
+import { usePagination } from "@/lib/admin/pagination";
 import {
   AdminButton,
   AdminCard,
@@ -20,6 +21,7 @@ import {
   Pill,
   StatusBadge,
   TableCell,
+  TablePagination,
   TableRow,
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
@@ -90,6 +92,8 @@ export default function UsersPage() {
       }),
     [users, query, plan, status],
   );
+
+  const pagination = usePagination(filtered);
 
   const applyCredits = (delta: number) => {
     if (!creditTarget) return;
@@ -230,7 +234,7 @@ export default function UsersPage() {
           headers={["Người dùng", "Gói & quyền", "Credits", "Dự án", "Tham gia", "Thao tác"]}
           isEmpty={filtered.length === 0}
         >
-          {filtered.map((user) => (
+          {pagination.items.map((user) => (
             <TableRow key={user.id}>
               <TableCell>
                 <div className="flex items-center gap-3">
@@ -311,6 +315,8 @@ export default function UsersPage() {
             </TableRow>
           ))}
         </DataTable>
+
+        <TablePagination pagination={pagination} unit="người dùng" />
       </AdminCard>
 
       <AdminModal

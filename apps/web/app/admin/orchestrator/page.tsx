@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowDown, ArrowUp, GripVertical, Plus, Trash2, Zap } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import {
   COST_LIMITS,
@@ -26,6 +27,7 @@ const TIER_LABEL = ["Ưu tiên 1 (mặc định)", "Dự phòng 1", "Dự phòng
 
 export default function OrchestratorPage() {
   const toast = useToast();
+  const reduceMotion = useReducedMotion();
   const [strategy, setStrategy] = useState<StrategyId>("cost");
   const [rules, setRules] = useState<RoutingRule[]>(DEFAULT_ROUTING);
   const [dragging, setDragging] = useState<number | null>(null);
@@ -149,8 +151,14 @@ export default function OrchestratorPage() {
 
         <ul className="mt-4 flex flex-col gap-2">
           {rules.map((rule, index) => (
-            <li
+            <motion.li
               key={rule.id}
+              layout="position"
+              transition={
+                reduceMotion
+                  ? { layout: { duration: 0 } }
+                  : { layout: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }
+              }
               draggable
               onDragStart={() => setDragging(index)}
               onDragOver={(event) => event.preventDefault()}
@@ -204,7 +212,7 @@ export default function OrchestratorPage() {
                   <Trash2 size={15} />
                 </AdminButton>
               </div>
-            </li>
+            </motion.li>
           ))}
         </ul>
       </AdminCard>

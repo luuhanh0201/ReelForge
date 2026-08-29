@@ -3,7 +3,6 @@ import { CacheModule } from '@nestjs/cache-manager';
 import {
   Global,
   Inject,
-  Logger,
   Module,
   type OnApplicationShutdown,
 } from '@nestjs/common';
@@ -12,6 +11,9 @@ import { Redis } from 'ioredis';
 import Keyv from 'keyv';
 import type { RedisConfig } from '../config/configuration.js';
 import { REDIS_CLIENT } from './redis.constants.js';
+import { buildRedisUrl, createRedisClient } from './redis-connection.js';
+import { RedisController } from './redis.controller.js';
+import { RedisMetricsService } from './redis-metrics.service.js';
 
 /**
  * Cung cấp hai thứ dùng chung toàn app:
@@ -30,7 +32,7 @@ import { REDIS_CLIENT } from './redis.constants.js';
         return {
           stores: [
             new Keyv({
-              store: new KeyvRedis(redis.url),
+              store: new KeyvRedis(buildRedisUrl(redis)),
               namespace: redis.keyPrefix,
             }),
           ],
@@ -39,27 +41,17 @@ import { REDIS_CLIENT } from './redis.constants.js';
       },
     }),
   ],
+  controllers: [RedisController],
   providers: [
+    RedisMetricsService,
     {
       provide: REDIS_CLIENT,
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const redis = config.getOrThrow<RedisConfig>('redis');
-        const logger = new Logger('Redis');
-
-        const client = new Redis(redis.url, {
-          keyPrefix: `${redis.keyPrefix}:`,
-          lazyConnect: false,
-        });
-
-        client.on('ready', () => logger.log('Redis đã sẵn sàng'));
-        client.on('error', (error: Error) => logger.error(error.message));
-
-        return client;
-      },
+      useFactory: (config: ConfigService) =>
+        createRedisClient(config.getOrThrow<RedisConfig>('redis')),
     },
   ],
-  exports: [REDIS_CLIENT, CacheModule],
+  exports: [REDIS_CLIENT, CacheModule, RedisMetricsService],
 })
 export class RedisModule implements OnApplicationShutdown {
   constructor(@Inject(REDIS_CLIENT) private readonly client: Redis) {}

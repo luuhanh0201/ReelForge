@@ -256,7 +256,7 @@ export const SCRIPT_MODELS: AiModel[] = [
 ];
 
 export const HOOK_RETENTION = {
-  label: "Hook Retention Score",
+  label: "Điểm giữ chân người xem",
   value: 78,
   hint: "Tỷ lệ giữ chân 3 giây đầu, đo trên 1.240 video gần nhất",
 };

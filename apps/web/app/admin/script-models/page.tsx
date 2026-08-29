@@ -8,8 +8,8 @@ export default function ScriptModelsPage() {
   return (
     <>
       <AdminPageHeader
-        title="AI Script & Hook Generator"
-        description="Các LLM sinh kịch bản bán hàng và hook giữ chân. Cấu hình temperature, context window và endpoint."
+        title="Tạo Kịch bản & Hook bằng AI"
+        description="Quản lý các mô hình AI dùng để tạo kịch bản và câu mở đầu thu hút, đồng thời tùy chỉnh cấu hình và theo dõi hiệu suất xử lý."
       />
 
       <AdminCard>

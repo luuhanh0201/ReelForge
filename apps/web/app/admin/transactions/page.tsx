@@ -10,6 +10,7 @@ import {
   type TransactionStatus,
 } from "@/config/admin/accounts.config";
 import { formatPrice } from "@/lib/format";
+import { usePagination } from "@/lib/admin/pagination";
 import {
   AdminButton,
   AdminCard,
@@ -20,6 +21,7 @@ import {
   Pill,
   StatusBadge,
   TableCell,
+  TablePagination,
   TableRow,
 } from "@/components/admin/primitives";
 import { useToast } from "@/components/admin/toast";
@@ -74,6 +76,8 @@ export default function TransactionsPage() {
       }),
     [query, method, status],
   );
+
+  const pagination = usePagination(filtered);
 
   const total = filtered
     .filter((item) => item.status === "success")
@@ -159,7 +163,7 @@ export default function TransactionsPage() {
           headers={["Mã", "Thời gian", "Đối tượng", "Hình thức", "Nội dung", "Số tiền", "Trạng thái"]}
           isEmpty={filtered.length === 0}
         >
-          {filtered.map((item) => {
+          {pagination.items.map((item) => {
             const state = STATUS_MAP[item.status];
 
             return (
@@ -187,6 +191,8 @@ export default function TransactionsPage() {
             );
           })}
         </DataTable>
+
+        <TablePagination pagination={pagination} unit="giao dịch" />
       </AdminCard>
     </>
   );

@@ -9,8 +9,8 @@ export default function VoiceModelsPage() {
   return (
     <>
       <AdminPageHeader
-        title="AI Voice & TTS Models"
-        description="Động cơ tổng hợp giọng đọc. Bật/tắt, chỉnh tham số và đo độ trễ thực tế của từng nhà cung cấp."
+        title="Giọng nói AI & Chuyển văn bản thành giọng nói"
+        description="Quản lý giọng nói AI, cấu hình hoạt động và theo dõi hiệu suất."
       />
       <ModelsSection kind="voice" initialModels={VOICE_MODELS} />
       <VoiceCatalog />

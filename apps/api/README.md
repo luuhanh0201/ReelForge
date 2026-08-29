@@ -15,6 +15,12 @@ pnpm start:dev
 
 Kiểm tra kết nối: `curl http://localhost:3001/health`
 
+Số liệu Redis cho trang admin: `curl http://localhost:3001/admin/redis/overview`
+
+Số liệu PostgreSQL cho trang admin: `curl http://localhost:3001/admin/database/overview`
+(kèm `/activity`, `/tables`, và hai thao tác ghi `POST /activity/:pid/terminate`,
+`POST /tables/:table/vacuum` — **chưa có auth, phải gắn guard trước khi deploy**)
+
 ```json
 { "status": "ok", "uptimeSeconds": 12, "dependencies": { "database": "up", "redis": "up" } }
 ```
@@ -23,14 +29,45 @@ Kiểm tra kết nối: `curl http://localhost:3001/health`
 
 | Thư mục | Vai trò |
 | :--- | :--- |
-| `src/config/configuration.ts` | Nguồn sự thật cho mọi biến môi trường (có validate biến bắt buộc) |
-| `src/database/` | `TypeOrmModule.forRootAsync` — PostgreSQL, `autoLoadEntities`, migration ở `dist/migrations` |
-| `src/redis/` | Client `ioredis` (token `REDIS_CLIENT`) + `CacheModule` lưu qua Keyv trên cùng Redis |
+| `src/config/configuration.ts` | Nguồn sự thật cho mọi biến môi trường (có validate biến bắt buộc). PostgreSQL nhận `DATABASE_URL` **hoặc** bộ `DB_HOST/PORT/DATABASE/USERNAME/PASSWORD` (Supabase); SSL tự bật khi host không phải localhost, ép bằng `DB_SSL` |
+| `src/database/` | `TypeOrmModule.forRootAsync` — PostgreSQL, `autoLoadEntities`, migration ở `dist/migrations`, và `DatabaseMetricsService` + `/admin/database/*` cấp số liệu cho dashboard admin |
+| `src/redis/redis-connection.ts` | Nơi duy nhất dựng kết nối Redis — nhận `REDIS_URL` hoặc bộ `REDIS_HOST/PORT/USERNAME/PASSWORD` (Redis Cloud), có cờ `REDIS_TLS` |
+| `src/redis/` | Client `ioredis` (token `REDIS_CLIENT`) + `CacheModule` lưu qua Keyv trên cùng Redis + `RedisMetricsService` đọc INFO cho dashboard admin |
 | `src/health/` | `GET /health` ping database và Redis |
 | `src/common/` | Exception filter chuẩn hoá JSON lỗi, `BusinessException`, `ERROR_CODES` |
 
-- `DB_SYNCHRONIZE=true` chỉ dùng ở dev. Production phải chạy migration.
+- `synchronize` luôn **tắt** ở mọi môi trường: schema do migration kiểm soát hoàn toàn.
 - Entity của từng feature đăng ký bằng `TypeOrmModule.forFeature([...])`, không cần khai báo tập trung.
+
+## Migration
+
+TypeORM CLI chạy trên code đã build (`dist/`), DataSource khai báo ở
+`src/database/data-source.ts` và đọc thẳng `.env`. Bảng lịch sử: `reelforge_migrations`.
+
+```bash
+# Sinh migration từ chênh lệch entity <-> database (tự build trước)
+pnpm migration:generate src/migrations/<TenMigration>
+
+# Tạo file migration rỗng để viết SQL tay
+pnpm migration:create src/migrations/<TenMigration>
+
+# Áp dụng / hoàn tác / xem trạng thái
+pnpm migration:run
+pnpm migration:revert
+pnpm migration:show
+```
+
+Quy ước:
+
+- Mỗi thay đổi schema đều phải đi kèm một file migration được commit; không sửa tay database.
+- Đọc lại SQL mà `migration:generate` sinh ra trước khi chạy — CLI so sánh với database
+  hiện tại nên dễ sinh thừa/thiếu nếu database đang lệch.
+- Migration đã chạy trên môi trường khác thì không sửa nữa, tạo migration mới để bù.
+- `down()` phải hoàn tác được `up()`.
+
+| Bảng | Entity | Ghi chú |
+| :--- | :--- | :--- |
+| `voices` | `src/voices/voice.entity.ts` | Danh mục giọng đọc TTS cho trang admin |
 
 ---
 
@@ -106,21 +143,6 @@ $ mau deploy
 
 With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
 
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
 ## Resources
 
 Check out a few resources that may come in handy when working with NestJS:
@@ -129,7 +151,6 @@ Check out a few resources that may come in handy when working with NestJS:
 - For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
 - To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
 - Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
 - Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
 - Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
 - To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
