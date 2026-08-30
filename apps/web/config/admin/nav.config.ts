@@ -67,7 +67,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         label: "AI Voice & TTS",
         href: "/admin/voice-models",
         icon: Mic2,
-        badge: "5",
       },
       {
         id: "script-models",
@@ -126,7 +125,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         label: "API Keys & Webhooks",
         href: "/admin/api-keys",
         icon: KeyRound,
-        badge: "2",
       },
       {
         id: "logs",

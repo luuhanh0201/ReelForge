@@ -158,6 +158,8 @@ export function AdminButton({
   type = "button",
   disabled = false,
   className = "",
+  title,
+  ariaLabel,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -165,6 +167,9 @@ export function AdminButton({
   type?: "button" | "submit";
   disabled?: boolean;
   className?: string;
+  /** Nút chỉ có icon thì bắt buộc đặt để hover hiện tên và trình đọc màn hình đọc được. */
+  title?: string;
+  ariaLabel?: string;
 }) {
   const variants = {
     primary: "bg-brand text-[#10151e] hover:bg-brand-hover",
@@ -178,6 +183,8 @@ export function AdminButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
+      aria-label={ariaLabel ?? title}
       className={`inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-btn px-4 text-sm font-semibold leading-none transition-colors [&>svg]:h-[18px] [&>svg]:w-[18px] [&>svg]:shrink-0 disabled:cursor-not-allowed disabled:opacity-45 ${variants[variant]} ${className}`}
     >
       {children}
@@ -325,9 +332,12 @@ export function TableCell({
 export function TablePagination({
   pagination,
   unit = "dòng",
+  sizes = PAGE_SIZES,
 }: {
   pagination: PaginationState;
   unit?: string;
+  /** Mặc định là mức dùng chung cho bảng; lưới thẻ truyền bội số của số cột. */
+  sizes?: readonly number[];
 }) {
   const { page, pageCount, pageSize, total, from, to, setPage, setPageSize } = pagination;
   const number = (value: number) => value.toLocaleString("vi-VN");
@@ -339,7 +349,7 @@ export function TablePagination({
           ariaLabel="Số dòng mỗi trang"
           value={String(pageSize)}
           onChange={(value) => setPageSize(Number(value))}
-          options={PAGE_SIZES.map((size) => ({
+          options={sizes.map((size) => ({
             id: String(size),
             label: `${size} ${unit}/trang`,
           }))}
@@ -357,10 +367,10 @@ export function TablePagination({
           variant="ghost"
           className="h-9 w-9 px-0"
           disabled={page <= 1}
+          title="Trang trước"
           onClick={() => setPage(page - 1)}
         >
           <ChevronLeft size={17} />
-          <span className="sr-only">Trang trước</span>
         </AdminButton>
 
         <span className="whitespace-nowrap px-1 font-mono text-xs font-semibold text-ink">
@@ -371,10 +381,10 @@ export function TablePagination({
           variant="ghost"
           className="h-9 w-9 px-0"
           disabled={page >= pageCount}
+          title="Trang sau"
           onClick={() => setPage(page + 1)}
         >
           <ChevronRight size={17} />
-          <span className="sr-only">Trang sau</span>
         </AdminButton>
       </div>
     </div>

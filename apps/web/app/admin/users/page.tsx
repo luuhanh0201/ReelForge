@@ -286,6 +286,7 @@ export default function UsersPage() {
                   <AdminButton
                     variant="ghost"
                     className="w-9 px-0"
+                    title="Cộng credits"
                     onClick={() => {
                       setCreditTarget(user);
                       setCreditAmount("10");
@@ -296,6 +297,7 @@ export default function UsersPage() {
                   <AdminButton
                     variant="ghost"
                     className="w-9 px-0"
+                    title="Đổi vai trò"
                     onClick={() => {
                       setEditTarget(user);
                       setEditRole(user.role);
@@ -306,6 +308,7 @@ export default function UsersPage() {
                   <AdminButton
                     variant="ghost"
                     className="w-9 px-0"
+                    title="Khóa hoặc mở khóa tài khoản"
                     onClick={() => setLockTarget(user)}
                   >
                     {user.status === "active" ? <Lock size={15} /> : <Unlock size={15} />}

@@ -1,6 +1,6 @@
 "use client";
 
-import { SCRIPT_MODELS, HOOK_RETENTION } from "@/config/admin/models.config";
+import { HOOK_RETENTION } from "@/config/admin/models.config";
 import { AdminCard, AdminPageHeader } from "@/components/admin/primitives";
 import { ModelsSection } from "@/components/admin/models-section";
 
@@ -31,7 +31,7 @@ export default function ScriptModelsPage() {
         </div>
       </AdminCard>
 
-      <ModelsSection kind="script" initialModels={SCRIPT_MODELS} />
+      <ModelsSection kind="script" />
     </>
   );
 }

@@ -2,14 +2,15 @@
 
 import { AlertTriangle, ArrowDown, ArrowUp, GripVertical, Plus, Trash2, Zap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   COST_LIMITS,
   DEFAULT_ROUTING,
   ROUTING_STRATEGIES,
-  SCRIPT_MODELS,
+  type AiModel,
   type RoutingRule,
 } from "@/config/admin/models.config";
+import { fetchAiModels } from "@/lib/admin/ai-models-api";
 import {
   AdminButton,
   AdminCard,
@@ -35,6 +36,18 @@ export default function OrchestratorPage() {
   const [pickedModel, setPickedModel] = useState("");
   const [budget, setBudget] = useState(String(COST_LIMITS.dailyBudgetUsd));
   const [threshold, setThreshold] = useState(String(COST_LIMITS.alertThresholdPercent));
+  // Danh sách model lấy từ database; phần chuỗi định tuyến bên dưới vẫn là mock.
+  const [scriptModels, setScriptModels] = useState<AiModel[]>([]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchAiModels("script")
+        .then(setScriptModels)
+        .catch(() => setScriptModels([]));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const spentPercent = Math.min(
     100,
@@ -42,12 +55,12 @@ export default function OrchestratorPage() {
   );
   const overThreshold = spentPercent >= Number(threshold || 100);
 
-  const available = SCRIPT_MODELS.filter(
+  const available = scriptModels.filter(
     (model) => !rules.some((rule) => rule.modelId === model.id),
   );
 
   const addRule = () => {
-    const model = SCRIPT_MODELS.find((item) => item.id === pickedModel);
+    const model = scriptModels.find((item) => item.id === pickedModel);
     if (!model) {
       toast("Chọn một model để thêm vào chuỗi dự phòng", "warning");
       return;
@@ -190,6 +203,7 @@ export default function OrchestratorPage() {
               <div className="flex shrink-0 gap-1">
                 <AdminButton
                   variant="ghost"
+                  title="Đẩy lên một bậc ưu tiên"
                   onClick={() => move(index, index - 1)}
                   disabled={index === 0}
                   className="w-9 px-0"
@@ -198,6 +212,7 @@ export default function OrchestratorPage() {
                 </AdminButton>
                 <AdminButton
                   variant="ghost"
+                  title="Hạ xuống một bậc ưu tiên"
                   onClick={() => move(index, index + 1)}
                   disabled={index === rules.length - 1}
                   className="w-9 px-0"
@@ -206,6 +221,7 @@ export default function OrchestratorPage() {
                 </AdminButton>
                 <AdminButton
                   variant="ghost"
+                  title="Gỡ khỏi chuỗi dự phòng"
                   onClick={() => removeRule(rule)}
                   className="w-9 px-0"
                 >

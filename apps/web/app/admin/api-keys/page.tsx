@@ -22,6 +22,7 @@ import {
   ToggleSwitch,
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
+import { GoogleTtsCredentialCard } from "@/components/admin/credentials/google-tts-card";
 import { useToast } from "@/components/admin/toast";
 
 export default function ApiKeysPage() {
@@ -127,12 +128,15 @@ export default function ApiKeysPage() {
         }
       />
 
+      <GoogleTtsCredentialCard />
+
       <AdminCard className="border-danger/30 bg-danger/5">
         <p className="flex items-start gap-2.5 text-sm text-ink">
           <ShieldAlert size={16} className="mt-0.5 shrink-0 text-danger" />
           <span>
-            <strong className="font-bold">Dữ liệu mô phỏng.</strong> Toàn bộ khóa hiển thị
-            ở đây là chuỗi giả. Khi nối backend thật, server{" "}
+            <strong className="font-bold">Phần bên dưới chưa có backend.</strong> Khóa và
+            webhook thêm ở đây chỉ tồn tại trong phiên trình duyệt, tải lại trang là mất.
+            Khi nối backend thật, server{" "}
             <strong className="font-bold">không được trả khóa gốc về trình duyệt</strong> —
             chỉ trả 4 ký tự cuối, và thao tác xoay vòng khóa phải chạy phía server. Trang
             admin cũng cần đăng nhập + phân quyền trước khi mở ra môi trường thật.
@@ -144,7 +148,9 @@ export default function ApiKeysPage() {
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
           <div className="mr-auto">
             <h2 className="font-display text-base font-bold text-ink">Khóa nhà cung cấp</h2>
-            <p className="mt-0.5 text-xs text-muted">{keys.length} khóa đang được quản lý</p>
+            <p className="mt-0.5 text-xs text-muted">
+              {keys.length === 0 ? "Chưa có khóa nào" : `${keys.length} khóa đang được quản lý`}
+            </p>
           </div>
           <AdminButton onClick={() => setAddKeyOpen(true)}>
             <Plus size={14} />
@@ -152,7 +158,11 @@ export default function ApiKeysPage() {
           </AdminButton>
         </div>
 
-        <DataTable headers={["Nhà cung cấp", "Khóa", "Xoay vòng", "Trạng thái", "Thao tác"]}>
+        <DataTable
+          headers={["Nhà cung cấp", "Khóa", "Xoay vòng", "Trạng thái", "Thao tác"]}
+          isEmpty={keys.length === 0}
+          emptyMessage="Chưa có khóa nào. Google Cloud TTS quản lý ở thẻ phía trên; nhà cung cấp khác chờ backend."
+        >
           {pagination.items.map((entry) => (
             <TableRow key={entry.id}>
               <TableCell>
@@ -173,11 +183,13 @@ export default function ApiKeysPage() {
                     onClick={() =>
                       setRevealed((current) => ({ ...current, [entry.id]: !current[entry.id] }))
                     }
+                    title={revealed[entry.id] ? "Ẩn khóa" : "Hiện khóa"}
                   >
                     {revealed[entry.id] ? <EyeOff size={14} /> : <Eye size={14} />}
                   </AdminButton>
                   <AdminButton
                     variant="ghost"
+                    title="Sao chép khóa đã che"
                     className="w-8 px-0"
                     onClick={() => copyValue(entry.maskedKey, entry.provider)}
                   >
@@ -208,6 +220,7 @@ export default function ApiKeysPage() {
                   </AdminButton>
                   <AdminButton
                     variant="ghost"
+                    title="Xoay vòng khóa"
                     className="w-9 px-0"
                     onClick={() =>
                       toast(`Yêu cầu xoay vòng khóa ${entry.provider} đã được ghi nhận`, "warning")

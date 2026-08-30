@@ -1,7 +1,6 @@
 "use client";
 
 import { Info } from "lucide-react";
-import { VIDEO_MODELS } from "@/config/admin/models.config";
 import { AdminCard, AdminPageHeader } from "@/components/admin/primitives";
 import { ModelsSection } from "@/components/admin/models-section";
 
@@ -24,7 +23,7 @@ export default function VideoModelsPage() {
         </p>
       </AdminCard>
 
-      <ModelsSection kind="video" initialModels={VIDEO_MODELS} />
+      <ModelsSection kind="video" />
     </>
   );
 }

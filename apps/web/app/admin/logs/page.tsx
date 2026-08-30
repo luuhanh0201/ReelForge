@@ -1,9 +1,10 @@
 "use client";
 
 import { Download, Search } from "lucide-react";
-import { useMemo, useState } from "react";
-import { AUDIT_LOGS, LOG_LEVEL_LABEL, type LogLevel } from "@/config/admin/infra.config";
-import { useAuditLogs } from "@/lib/admin/audit-store";
+import { useEffect, useMemo, useState } from "react";
+import { LOG_LEVEL_LABEL, type LogLevel } from "@/config/admin/infra.config";
+import { fetchAuditLogs } from "@/lib/admin/audit-api";
+import { hydrateAuditLogs, useAuditLogs } from "@/lib/admin/audit-store";
 import { usePagination } from "@/lib/admin/pagination";
 import {
   AdminButton,
@@ -31,8 +32,6 @@ const LEVEL_OPTIONS: { id: LevelFilter; label: string }[] = [
 
 const LEVEL_ACCENT = { info: "info", warning: "amber", critical: "danger" } as const;
 
-const ADMINS = Array.from(new Set(AUDIT_LOGS.map((log) => log.admin)));
-
 const download = (filename: string, content: string, type: string) => {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const anchor = document.createElement("a");
@@ -48,6 +47,27 @@ export default function LogsPage() {
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<LevelFilter>("all");
   const [admin, setAdmin] = useState<string>("all");
+  const [source, setSource] = useState<"server" | "local">("local");
+
+  useEffect(() => {
+    // Nạp nhật ký thật từ backend; hỏng thì giữ nguyên dữ liệu mô phỏng phía client.
+    const timer = window.setTimeout(() => {
+      void fetchAuditLogs()
+        .then((rows) => {
+          hydrateAuditLogs(rows);
+          setSource("server");
+        })
+        .catch(() => setSource("local"));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // Danh sách người thao tác suy thẳng từ nhật ký đang có, không hardcode.
+  const admins = useMemo(
+    () => Array.from(new Set(auditLogs.map((log) => log.admin))),
+    [auditLogs],
+  );
 
   const filtered = useMemo(
     () =>
@@ -133,10 +153,15 @@ export default function LogsPage() {
             onChange={setAdmin}
             options={[
               { id: "all", label: "Mọi admin" },
-              ...ADMINS.map((name) => ({ id: name, label: name })),
+              ...admins.map((name) => ({ id: name, label: name })),
             ]}
           />
-          <p className="ml-auto text-xs text-muted">{filtered.length} bản ghi</p>
+          <div className="ml-auto flex items-center gap-2">
+            <Pill accent={source === "server" ? "mint" : "amber"}>
+              {source === "server" ? "Nhật ký thật" : "Chưa nối được API"}
+            </Pill>
+            <p className="text-xs text-muted">{filtered.length} bản ghi</p>
+          </div>
         </div>
 
         <DataTable

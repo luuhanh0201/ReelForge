@@ -11,10 +11,18 @@ interface ApiErrorBody {
  * Lỗi được bóc từ JSON format thống nhất của backend để hiện đúng nguyên nhân.
  */
 export const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  // FormData phải để trình duyệt tự sinh Content-Type kèm multipart boundary;
+  // gán tay "application/json" sẽ làm server không tách được file.
+  const isFormData =
+    typeof FormData !== "undefined" && init?.body instanceof FormData;
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     cache: "no-store",
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...init?.headers,
+    },
   });
 
   if (!response.ok) {

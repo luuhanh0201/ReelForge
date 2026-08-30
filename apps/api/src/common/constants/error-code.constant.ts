@@ -64,6 +64,40 @@ export const ERROR_CODES = {
     status: HttpStatus.SERVICE_UNAVAILABLE,
     message: 'Dịch vụ tạm thời không khả dụng, vui lòng thử lại sau',
   },
+
+  /* --------------------------------------------------------------- */
+  /* Credential nhà cung cấp ngoài                                     */
+  /* Lỗi nguyên bản của provider KHÔNG được trả về client — chỉ map     */
+  /* sang các mã ổn định dưới đây, chi tiết chỉ nằm trong log server.   */
+  /* --------------------------------------------------------------- */
+  INVALID_SERVICE_ACCOUNT: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'File service account không hợp lệ',
+  },
+  CREDENTIAL_NOT_CONFIGURED: {
+    status: HttpStatus.NOT_FOUND,
+    message: 'Chưa cấu hình credential cho nhà cung cấp này',
+  },
+  GOOGLE_TTS_AUTH_FAILED: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Google từ chối xác thực service account này',
+  },
+  GOOGLE_TTS_PERMISSION_DENIED: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Service account thiếu quyền dùng Cloud Text-to-Speech',
+  },
+  GOOGLE_TTS_API_DISABLED: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Cloud Text-to-Speech API chưa được bật trong project này',
+  },
+  GOOGLE_TTS_TIMEOUT: {
+    status: HttpStatus.GATEWAY_TIMEOUT,
+    message: 'Gọi Google Text-to-Speech quá thời gian chờ',
+  },
+  GOOGLE_TTS_UNAVAILABLE: {
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: 'Không kết nối được tới Google Text-to-Speech',
+  },
 } as const satisfies Record<string, ErrorCodeDefinition>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

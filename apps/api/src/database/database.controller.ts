@@ -1,4 +1,6 @@
-import { Controller, Get, Param, ParseIntPipe, Post } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
+import { AuditLogService } from '../audit/audit-log.service.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import {
   DatabaseMetricsService,
@@ -21,7 +23,10 @@ const unavailable = (message: string, error: unknown): BusinessException =>
  */
 @Controller('admin/database')
 export class DatabaseController {
-  constructor(private readonly metrics: DatabaseMetricsService) {}
+  constructor(
+    private readonly metrics: DatabaseMetricsService,
+    private readonly auditLogs: AuditLogService,
+  ) {}
 
   @Get('overview')
   async overview(): Promise<DatabaseOverview> {
@@ -53,9 +58,20 @@ export class DatabaseController {
   @Post('activity/:pid/terminate')
   async terminate(
     @Param('pid', ParseIntPipe) pid: number,
+    @Req() request: Request,
   ): Promise<{ terminated: DatabaseActivityItem }> {
     try {
-      return { terminated: await this.metrics.terminateBackend(pid) };
+      const terminated = await this.metrics.terminateBackend(pid);
+
+      await this.auditLogs.record({
+        action: 'Ngắt tiến trình PostgreSQL',
+        target: `PID ${pid} · ${terminated.application}`,
+        level: 'critical',
+        ip: request.ip ?? null,
+        metadata: { durationSec: terminated.durationSec, state: terminated.state },
+      });
+
+      return { terminated };
     } catch (error) {
       throw new BusinessException('BAD_REQUEST', {
         message: `Không ngắt được tiến trình ${pid}`,
@@ -68,9 +84,20 @@ export class DatabaseController {
   @Post('tables/:table/vacuum')
   async vacuum(
     @Param('table') table: string,
+    @Req() request: Request,
   ): Promise<{ table: string; durationMs: number }> {
     try {
-      return await this.metrics.vacuumTable(table);
+      const result = await this.metrics.vacuumTable(table);
+
+      await this.auditLogs.record({
+        action: 'Chạy VACUUM ANALYZE',
+        target: result.table,
+        level: 'warning',
+        ip: request.ip ?? null,
+        metadata: { durationMs: result.durationMs },
+      });
+
+      return result;
     } catch (error) {
       throw new BusinessException('BAD_REQUEST', {
         message: `Không chạy được VACUUM cho bảng ${table}`,

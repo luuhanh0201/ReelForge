@@ -9,6 +9,10 @@ import {
 
 export type VoiceGender = 'female' | 'male';
 
+/** Câu mặc định khi thêm giọng — đủ ngắn để nghe thử gần như không tốn tiền. */
+export const DEFAULT_SAMPLE_TEXT =
+  'Xin chào, đây là giọng đọc thử của ReelForge. Sản phẩm đang giảm giá năm mươi phần trăm.';
+
 @Entity('voices')
 export class Voice {
   @PrimaryGeneratedColumn('uuid')
@@ -45,6 +49,22 @@ export class Voice {
   @Index('idx_voices_enabled')
   @Column({ type: 'boolean', default: false })
   enabled!: boolean;
+  /** Câu thoại ngắn dùng để nghe thử giọng này. */
+  @Column({
+    name: 'sample_text',
+    type: 'varchar',
+    length: 300,
+    default: DEFAULT_SAMPLE_TEXT,
+  })
+  sampleText!: string;
+
+  /** Lần cuối xác nhận provider_voice_id này có thật bên nhà cung cấp. */
+  @Column({ name: 'verified_at', type: 'timestamptz', nullable: true })
+  verifiedAt!: Date | null;
+
+  @Column({ name: 'verification_note', type: 'varchar', length: 200, nullable: true })
+  verificationNote!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })

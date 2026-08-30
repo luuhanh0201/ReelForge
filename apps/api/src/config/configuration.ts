@@ -27,12 +27,20 @@ export interface RedisConfig {
   keyPrefix: string;
 }
 
+export interface CredentialsConfig {
+  /** Khoá mã hoá theo version — giữ nhiều version cùng lúc để xoay khoá được. */
+  keys: Record<number, string>;
+  /** Version dùng để mã hoá bản ghi mới. */
+  activeVersion: number;
+}
+
 export interface AppConfig {
   nodeEnv: string;
   isProduction: boolean;
   port: number;
   database: DatabaseConfig;
   redis: RedisConfig;
+  credentials: CredentialsConfig;
 }
 
 const required = (key: string): string => {
@@ -134,6 +142,38 @@ const buildRedisConfig = (): RedisConfig => {
   };
 };
 
+/**
+ * Khai báo dạng "1:<base64>,2:<base64>". Giữ nguyên chuỗi base64 ở đây; việc kiểm tra
+ * độ dài khoá do AesGcmEncryptionService làm khi module được nạp, để app vẫn khởi động
+ * được ở môi trường không bật tính năng quản lý credential.
+ */
+const buildCredentialsConfig = (): CredentialsConfig => {
+  const raw = process.env.CREDENTIAL_ENCRYPTION_KEYS?.trim() ?? '';
+  const keys: Record<number, string> = {};
+
+  for (const entry of raw.split(',')) {
+    const trimmed = entry.trim();
+    if (trimmed === '') continue;
+
+    const separator = trimmed.indexOf(':');
+    const version = Number(trimmed.slice(0, separator));
+    const key = trimmed.slice(separator + 1).trim();
+
+    if (separator === -1 || !Number.isInteger(version) || version <= 0 || key === '') {
+      throw new Error(
+        'CREDENTIAL_ENCRYPTION_KEYS sai định dạng, cần "1:<base64>,2:<base64>"',
+      );
+    }
+
+    keys[version] = key;
+  }
+
+  return {
+    keys,
+    activeVersion: toNumber(process.env.CREDENTIAL_ENCRYPTION_KEY_VERSION, 1),
+  };
+};
+
 export const configuration = (): AppConfig => {
   const nodeEnv = process.env.NODE_ENV ?? 'development';
   const isProduction = nodeEnv === 'production';
@@ -144,5 +184,6 @@ export const configuration = (): AppConfig => {
     port: toNumber(process.env.PORT, 3001),
     database: buildDatabaseConfig(),
     redis: buildRedisConfig(),
+    credentials: buildCredentialsConfig(),
   };
 };

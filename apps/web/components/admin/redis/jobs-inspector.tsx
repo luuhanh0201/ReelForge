@@ -208,6 +208,7 @@ export function JobsInspector({
                   <AdminButton
                     variant="ghost"
                     className="h-9 w-9 px-0"
+                    title="Thử lại job"
                     onClick={() => onRetry(job)}
                   >
                     <RefreshCw size={17} />
@@ -215,6 +216,7 @@ export function JobsInspector({
                   <AdminButton
                     variant="ghost"
                     className="h-9 w-9 px-0"
+                    title="Xóa job khỏi hàng đợi"
                     onClick={() => onDelete(job)}
                   >
                     <Trash2 size={17} />

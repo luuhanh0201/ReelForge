@@ -17,7 +17,9 @@
     "skipLibCheck": true,
     "strict": true,
     "strictPropertyInitialization": false,
-    "types": ["vitest/globals", "node"],
+    // "multer" cần khai báo tường minh: `types` đang giới hạn nên phần bổ sung
+    // global `Express.Multer.File` của @types/multer không tự được nạp.
+    "types": ["vitest/globals", "node", "multer"],
     // `supertest` là package CJS không khai báo "exports" nên subpath
     // `supertest/types` không resolve được ở ESM mode của nodenext.
     // Trỏ thẳng vào file declaration của @types/supertest.
