@@ -14,24 +14,32 @@ import { HERO, HERO_TICKER, HERO_VALUE_CARDS } from "@/config/content.config";
 import { SITE } from "@/config/site.config";
 import { ACCENT } from "@/lib/accent";
 import { useApp } from "@/lib/app-provider";
+import { overrideText, useLandingConfig } from "@/lib/landing-config-provider";
 import { L } from "@/lib/i18n";
 import { HeroVideoWall } from "@/components/effects/hero-video-wall";
+import { LandingVoiceButton } from "@/components/effects/landing-voice-button";
 import { Reveal } from "@/components/ui/reveal";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
 
 function WordCycler() {
   const { t } = useApp();
+  const cms = useLandingConfig();
   const [index, setIndex] = useState(0);
+
+  // Từ khoá do CMS quản; chưa cấu hình thì dùng danh sách tĩnh.
+  const words = cms?.content.keywords.length
+    ? cms.content.keywords
+    : HERO.cyclerWords;
 
   useEffect(() => {
     const timer = window.setInterval(
-      () => setIndex((current) => (current + 1) % HERO.cyclerWords.length),
+      () => setIndex((current) => (current + 1) % words.length),
       HERO.cyclerIntervalMs,
     );
     return () => window.clearInterval(timer);
-  }, []);
+  }, [words.length]);
 
-  const word = HERO.cyclerWords[index];
+  const word = words[index % words.length];
   if (!word) return null;
 
   return (
@@ -137,7 +145,8 @@ function LinkActionBox({ value, onValueChange, inputRef }: LinkActionBoxProps) {
 }
 
 export function HeroSection() {
-  const { t, user, openAuth } = useApp();
+  const { t, locale, user, openAuth } = useApp();
+  const cms = useLandingConfig();
   const [link, setLink] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -168,17 +177,17 @@ export function HeroSection() {
       <div className="relative z-10 mx-auto max-w-5xl">
         <Reveal className="text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-4 py-1.5 text-[11px] font-bold tracking-[0.16em] text-brand">
-            ✨ {t(HERO.badge)}
+            ✨ {overrideText(cms?.content.heroBadge, HERO.badge, locale)}
           </span>
 
           <h1 className="mt-6 font-display text-4xl font-bold leading-[1.15] tracking-tight text-ink sm:text-5xl lg:text-6xl">
-            {t(HERO.titleStart)}
+            {overrideText(cms?.content.heroTitlePrefix, HERO.titleStart, locale)}
             <WordCycler />
-            {t(HERO.titleEnd)}
+            {cms ? null : t(HERO.titleEnd)}
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
-            {t(HERO.description)}
+            {overrideText(cms?.content.heroSubtitle, HERO.description, locale)}
           </p>
         </Reveal>
 
@@ -188,6 +197,12 @@ export function HeroSection() {
             onValueChange={setLink}
             inputRef={inputRef}
           />
+        </Reveal>
+
+        <Reveal delay={0.12}>
+          <div className="mt-6 flex justify-center">
+            <LandingVoiceButton slot="hero" label="Nghe thử giọng đọc" />
+          </div>
         </Reveal>
 
         <Reveal delay={0.15}>

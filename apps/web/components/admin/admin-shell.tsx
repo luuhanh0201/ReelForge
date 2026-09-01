@@ -51,11 +51,18 @@ export function AdminShell({ children }: { children: ReactNode }) {
             }`}
           >
             <p
-              className={`flex items-center gap-1.5 whitespace-nowrap px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.1em] ${
+              className={`flex flex-wrap items-center gap-1.5 px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.1em] ${
                 group.aiPowered ? "text-brand" : "text-muted"
               }`}
             >
               {group.title}
+
+              {/* Huy hiệu nhóm, ví dụ "CMS Live" của nhóm Landing Page. */}
+              {group.badge ? (
+                <span className="shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[9px] font-bold text-[#10151e]">
+                  {group.badge}
+                </span>
+              ) : null}
             </p>
 
             <ul className="flex flex-col gap-0.5">

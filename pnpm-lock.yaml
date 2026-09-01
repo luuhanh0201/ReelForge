@@ -47,6 +47,9 @@ importers:
       cache-manager:
         specifier: ^7.2.9
         version: 7.2.9
+      google-auth-library:
+        specifier: ^11.0.2
+        version: 11.0.2(supports-color@7.2.0)
       ioredis:
         specifier: ^6.0.0
         version: 6.0.0(supports-color@7.2.0)

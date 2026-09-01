@@ -1,4 +1,6 @@
 import type { VoiceEntry, VoiceGender } from "@/config/admin/models.config";
+
+export type { VoiceEntry } from "@/config/admin/models.config";
 import { request } from "./api-client";
 
 /** Một giọng trong danh mục nhà cung cấp (chưa chắc đã nhập vào hệ thống). */

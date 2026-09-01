@@ -1,5 +1,10 @@
 import {
   Cpu,
+  Image,
+  LayoutTemplate,
+  Mic,
+  Palette,
+  PenLine,
   FileSliders,
   KeyRound,
   LayoutDashboard,
@@ -32,6 +37,8 @@ export interface AdminNavGroup {
   items: AdminNavItem[];
   /** Nhóm chạy bằng AI — được tô nhấn trong sidebar để phân biệt với nhóm vận hành. */
   aiPowered?: boolean;
+  /** Huy hiệu nhỏ cạnh tiêu đề nhóm. */
+  badge?: string;
 }
 
 export const ADMIN_BASE_PATH = "/admin";
@@ -80,6 +87,43 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         label: "Điều phối & Phân luồng",
         href: "/admin/orchestrator",
         icon: Shuffle,
+      },
+    ],
+  },
+  {
+    id: "landing_cms",
+    title: "Quản trị Landing Page & Giao diện",
+    badge: "CMS Live",
+    items: [
+      {
+        id: "landing-cms",
+        label: "CMS & Tùy biến chung",
+        href: "/admin/landing-cms",
+        icon: LayoutTemplate,
+      },
+      {
+        id: "landing-voice",
+        label: "Cấu hình giọng Voice",
+        href: "/admin/landing-voice",
+        icon: Mic,
+      },
+      {
+        id: "landing-theme",
+        label: "Màu sắc & Branding",
+        href: "/admin/landing-theme",
+        icon: Palette,
+      },
+      {
+        id: "landing-content",
+        label: "Nội dung, Hero & Tiêu đề",
+        href: "/admin/landing-content",
+        icon: PenLine,
+      },
+      {
+        id: "landing-showcase",
+        label: "Video mẫu & Showcase",
+        href: "/admin/landing-showcase",
+        icon: Image,
       },
     ],
   },

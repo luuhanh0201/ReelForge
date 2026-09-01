@@ -14,6 +14,7 @@ import { ACCENT } from "@/lib/accent";
 import { useApp } from "@/lib/app-provider";
 import { formatPrice } from "@/lib/format";
 import { L } from "@/lib/i18n";
+import { LandingVoiceButton } from "@/components/effects/landing-voice-button";
 import { Reveal } from "@/components/ui/reveal";
 import { SectionHeading } from "@/components/ui/section-heading";
 
@@ -213,6 +214,18 @@ export function SandboxSection() {
                         </button>
                       );
                     })}
+                  </div>
+
+                  {/*
+                    Phát bản audio đã cache của giọng cấu hình cho vị trí Mini Studio.
+                    Không gọi nhà cung cấp từ trang công khai nên khách bấm bao nhiêu
+                    lần cũng không phát sinh chi phí.
+                  */}
+                  <div className="mt-3">
+                    <LandingVoiceButton
+                      slot="studio"
+                      label={t(L("Nghe thử giọng demo", "Preview demo voice"))}
+                    />
                   </div>
                 </div>
 
