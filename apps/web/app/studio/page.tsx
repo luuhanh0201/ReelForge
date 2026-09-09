@@ -3,10 +3,10 @@
 import { ArrowLeft, Coins, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { STUDIO } from "@/config/content.config";
+import { PLAN_LABEL } from "@/config/plans.config";
 import { useApp } from "@/lib/app-provider";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { StatusScreen } from "@/components/layout/status-screen";
-import { L } from "@/lib/i18n";
 
 /**
  * Private route: chưa đăng nhập thì trả về màn hình 403 kèm nút mở AuthModal.
@@ -19,7 +19,10 @@ export default function StudioPage() {
   if (!user) {
     return (
       <>
-        <StatusScreen status="forbidden" onPrimary={() => openAuth("signin")} />
+        <StatusScreen
+          status="forbidden"
+          onPrimary={() => openAuth("signin", "/studio")}
+        />
         <AuthModal />
       </>
     );
@@ -54,9 +57,7 @@ export default function StudioPage() {
             <p className="text-xs text-muted">{t(STUDIO.planLabel)}</p>
             <p className="mt-1 inline-flex items-center gap-1.5 font-display text-xl font-bold text-ink">
               <Sparkles size={18} className="text-brand" />
-              {user.plan === "pro"
-                ? t(L("Creator Pro", "Creator Pro"))
-                : t(L("Starter", "Starter"))}
+              {t(PLAN_LABEL[user.plan])}
             </p>
           </div>
         </div>

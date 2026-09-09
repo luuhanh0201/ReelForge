@@ -5,6 +5,7 @@ import {
   BadgePercent,
   Captions,
   Clapperboard,
+  Crown,
   Gauge,
   Home,
   Layers,
@@ -20,6 +21,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import type { Accent } from "@/lib/accent";
 import { L, type Localized } from "@/lib/i18n";
 
 /* ------------------------------------------------------------------ */
@@ -604,6 +606,15 @@ export const VOICE_SECTION = {
 /* Bảng giá (#bang-gia)                                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Mức nhấn thị giác của thẻ giá, tăng dần theo bậc gói.
+ *
+ * `plain` → viền trung tính, không huy hiệu. `soft` → huy hiệu viền nhạt.
+ * `strong` → huy hiệu nền đặc + quầng sáng. `elite` → thêm vòng sáng viền trong.
+ * Chiều sâu tạo bằng **khối màu phẳng và blur**, không gradient — rule số 1.
+ */
+export type PlanEmphasis = "plain" | "soft" | "strong" | "elite";
+
 export interface PricingPlan {
   id: string;
   name: Localized;
@@ -612,7 +623,11 @@ export interface PricingPlan {
   description: Localized;
   features: Localized[];
   cta: Localized;
-  highlighted: boolean;
+  /** Tông màu của gói — khớp `PLAN_ACCENT` trong `config/plans.config.ts`. */
+  accent: Accent;
+  emphasis: PlanEmphasis;
+  /** Huy hiệu góc thẻ. Gói thấp nhất không có, nhưng chỗ vẫn được giữ để các hàng thẳng. */
+  badge: { label: Localized; icon: LucideIcon } | null;
 }
 
 export const PRICING_SECTION = {
@@ -629,13 +644,12 @@ export const PRICING_SECTION = {
   perMonth: L("/tháng", "/month"),
   billedYearly: L("thanh toán theo năm", "billed yearly"),
   creditsLabel: L("Credits", "Credits"),
-  recommended: L("Khuyên dùng", "Recommended"),
 } as const;
 
 export const PRICING_PLANS: PricingPlan[] = [
   {
-    id: "starter",
-    name: L("Starter", "Starter"),
+    id: "free",
+    name: L("Free", "Free"),
     monthlyPrice: 0,
     credits: 10,
     description: L(
@@ -649,11 +663,13 @@ export const PRICING_PLANS: PricingPlan[] = [
       L("Kho hook & sticker cơ bản", "Basic hook & sticker library"),
     ],
     cta: L("Dùng thử miễn phí", "Start for free"),
-    highlighted: false,
+    accent: "mint",
+    emphasis: "plain",
+    badge: null,
   },
   {
-    id: "creator-pro",
-    name: L("Creator Pro", "Creator Pro"),
+    id: "advanced",
+    name: L("Nâng cao", "Advanced"),
     monthlyPrice: 199000,
     credits: 60,
     description: L(
@@ -667,12 +683,14 @@ export const PRICING_PLANS: PricingPlan[] = [
       L("Ưu tiên hàng đợi render", "Priority render queue"),
       L("Timeline đa phân cảnh đầy đủ", "Full multi-scene timeline"),
     ],
-    cta: L("Nâng cấp Creator Pro", "Upgrade to Creator Pro"),
-    highlighted: true,
+    cta: L("Nâng cấp gói Nâng cao", "Upgrade to Advanced"),
+    accent: "mint",
+    emphasis: "soft",
+    badge: { label: L("Phổ biến nhất", "Most popular"), icon: Sparkles },
   },
   {
-    id: "agency",
-    name: L("Agency / KOC Scale", "Agency / KOC Scale"),
+    id: "plus",
+    name: L("Plus", "Plus"),
     monthlyPrice: 499000,
     credits: 200,
     description: L(
@@ -686,8 +704,31 @@ export const PRICING_PLANS: PricingPlan[] = [
       L("Quyền thương mại toàn diện", "Full commercial rights"),
       L("Quản lý nhiều kênh trong một tài khoản", "Manage multiple channels in one account"),
     ],
+    cta: L("Nâng cấp gói Plus", "Upgrade to Plus"),
+    accent: "brand",
+    emphasis: "strong",
+    badge: { label: L("Khuyên dùng", "Recommended"), icon: Zap },
+  },
+  {
+    id: "premium",
+    name: L("Premium", "Premium"),
+    monthlyPrice: 999000,
+    credits: 500,
+    description: L(
+      "Cho thương hiệu và agency cần sản lượng video lớn mỗi tháng.",
+      "For brands and agencies shipping video at high volume every month.",
+    ),
+    features: [
+      L("500 Credits mỗi tháng", "500 credits per month"),
+      L("Giọng đọc riêng theo thương hiệu", "Brand-specific custom voice"),
+      L("Hàng đợi render cao nhất", "Highest render priority"),
+      L("Quản lý tài khoản riêng", "Dedicated account manager"),
+      L("Cam kết SLA và hoá đơn doanh nghiệp", "SLA commitment and business invoicing"),
+    ],
     cta: L("Liên hệ tư vấn", "Talk to sales"),
-    highlighted: false,
+    accent: "voice",
+    emphasis: "elite",
+    badge: { label: L("Cao cấp nhất", "Top tier"), icon: Crown },
   },
 ];
 
@@ -764,39 +805,29 @@ export const FAQS: { id: string; question: Localized; answer: Localized }[] = [
 
 export type AuthMode = "signin" | "signup";
 
+/**
+ * Nội dung hộp đăng nhập. Google là cách đăng nhập duy nhất nên ở đây **không còn** nhãn
+ * cho form email/mật khẩu — giữ lại chỉ tạo ra chữ hứa hẹn một đường đăng nhập không có.
+ */
 export const AUTH_MODAL = {
   modes: {
     signin: {
       tab: L("Đăng nhập", "Sign in"),
       title: L("Chào mừng trở lại", "Welcome back"),
       description: L(
-        "Đăng nhập một chạm bằng Google, hoặc dùng email bạn đã đăng ký.",
-        "Sign in with Google in one tap, or use the email you registered with.",
+        "Đăng nhập một chạm bằng tài khoản Google — không cần nhớ mật khẩu.",
+        "Sign in with your Google account in one tap — no password to remember.",
       ),
-      submit: L("Đăng nhập", "Sign in"),
-      switchHint: L("Chưa có tài khoản?", "New to ReelForge?"),
-      switchAction: L("Đăng ký ngay", "Create one"),
     },
     signup: {
       tab: L("Đăng ký", "Sign up"),
       title: L("Bắt đầu với ReelForge", "Get started with ReelForge"),
       description: L(
-        "Tạo tài khoản trong 30 giây và nhận credits dùng thử ngay.",
-        "Create an account in 30 seconds and get trial credits right away.",
+        "Tạo tài khoản bằng Google trong 30 giây và nhận credits dùng thử ngay.",
+        "Create an account with Google in 30 seconds and get trial credits right away.",
       ),
-      submit: L("Tạo tài khoản bằng email", "Create account with email"),
-      switchHint: L("Đã có tài khoản?", "Already have an account?"),
-      switchAction: L("Đăng nhập", "Sign in"),
     },
   },
-  fields: {
-    name: L("Tên hiển thị", "Display name"),
-    email: L("Email của bạn", "Your email"),
-    password: L("Mật khẩu", "Password"),
-  },
-  passwordMinLength: 6,
-  forgotPassword: L("Quên mật khẩu?", "Forgot password?"),
-  divider: L("hoặc dùng email", "or use email"),
   perks: [
     L("Xuất video 1080p không watermark", "1080p export with no watermark"),
     L("Toàn bộ giọng đọc AI cao cấp", "Every premium AI voice"),

@@ -4,7 +4,6 @@ import { AesGcmEncryptionService } from '../common/security/aes-gcm-encryption.s
 import { GoogleTtsCredentialVerifierService } from './google-tts-credential-verifier.service.js';
 import { GoogleTtsSynthesisService } from './google-tts-synthesis.service.js';
 import { GoogleTtsCredentialProvider } from './google-tts-credential.provider.js';
-import { LocalOnlyGuard } from './local-only.guard.js';
 import { ProviderCredential } from './provider-credential.entity.js';
 import { ProviderCredentialsController } from './provider-credentials.controller.js';
 import { ProviderCredentialsService } from './provider-credentials.service.js';
@@ -12,21 +11,18 @@ import { ProviderCredentialsService } from './provider-credentials.service.js';
 /**
  * Module quản lý credential nhà cung cấp ngoài.
  *
- * Module luôn được nạp vì các module khác (ai-models, voices) cần service để xác minh
- * với nhà cung cấp. **Riêng controller chỉ mở ngoài production** vì hệ thống chưa có
- * xác thực admin — `LocalOnlyGuard` chặn thêm lần nữa ở tầng route.
+ * Trước đây controller chỉ được nạp ngoài production vì hệ thống chưa có xác thực admin.
+ * Nay `AuthModule` bảo vệ bằng vai `admin` thật nên controller chạy ở mọi môi trường.
  */
 @Module({
   imports: [TypeOrmModule.forFeature([ProviderCredential])],
-  controllers:
-    process.env.NODE_ENV === 'production' ? [] : [ProviderCredentialsController],
+  controllers: [ProviderCredentialsController],
   providers: [
     ProviderCredentialsService,
     GoogleTtsCredentialVerifierService,
     GoogleTtsSynthesisService,
     GoogleTtsCredentialProvider,
     AesGcmEncryptionService,
-    LocalOnlyGuard,
   ],
   exports: [
     GoogleTtsCredentialProvider,

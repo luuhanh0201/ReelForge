@@ -1,47 +1,13 @@
-export type UserPlan = "starter" | "creator-pro" | "agency";
-export type UserRole = "admin" | "editor" | "viewer";
+/** Khớp enum `role` của bảng `users` ở API: `user` là khách, ba vai còn lại là nội bộ. */
+export type UserRole = "user" | "viewer" | "editor" | "admin";
 export type UserStatus = "active" | "suspended";
 
-export interface AdminUser {
-  id: string;
-  name: string;
-  email: string;
-  plan: UserPlan;
-  role: UserRole;
-  status: UserStatus;
-  credits: number;
-  creditQuota: number;
-  projects: number;
-  joinedAt: string;
-}
-
-/** Nhãn gói khớp với bảng giá trên landing page — một nguồn sự thật. */
-export const PLAN_LABEL: Record<UserPlan, string> = {
-  starter: "Starter",
-  "creator-pro": "Creator Pro",
-  agency: "Agency",
-};
-
 export const ROLE_LABEL: Record<UserRole, string> = {
-  admin: "Admin",
-  editor: "Editor",
+  user: "Người dùng",
   viewer: "Viewer",
+  editor: "Editor",
+  admin: "Admin",
 };
-
-export const ADMIN_USERS: AdminUser[] = [
-  { id: "u-1041", name: "Trần Ban Mai", email: "banmai.koc@gmail.com", plan: "creator-pro", role: "editor", status: "active", credits: 42, creditQuota: 60, projects: 128, joinedAt: "2026-03-14" },
-  { id: "u-1042", name: "Nguyễn Minh Quang", email: "quang.review@gmail.com", plan: "agency", role: "admin", status: "active", credits: 164, creditQuota: 200, projects: 512, joinedAt: "2025-11-02" },
-  { id: "u-1043", name: "Lê Mỹ An", email: "myan.beauty@gmail.com", plan: "creator-pro", role: "editor", status: "active", credits: 7, creditQuota: 60, projects: 96, joinedAt: "2026-01-27" },
-  { id: "u-1044", name: "Phạm Quốc Tuấn", email: "tuan.fashion@gmail.com", plan: "starter", role: "viewer", status: "suspended", credits: 0, creditQuota: 10, projects: 8, joinedAt: "2026-08-01" },
-  { id: "u-1045", name: "Đỗ Thanh Hà", email: "ha.homeliving@gmail.com", plan: "creator-pro", role: "editor", status: "active", credits: 58, creditQuota: 60, projects: 43, joinedAt: "2026-05-19" },
-  { id: "u-1046", name: "Vũ Gia Bảo", email: "baovu.tech@gmail.com", plan: "agency", role: "editor", status: "active", credits: 92, creditQuota: 200, projects: 287, joinedAt: "2025-12-08" },
-  { id: "u-1047", name: "Hoàng Thu Trang", email: "trang.momshop@gmail.com", plan: "starter", role: "viewer", status: "active", credits: 4, creditQuota: 10, projects: 3, joinedAt: "2026-08-21" },
-  { id: "u-1048", name: "Bùi Đức Anh", email: "ducanh.agency@gmail.com", plan: "agency", role: "admin", status: "active", credits: 188, creditQuota: 200, projects: 401, joinedAt: "2025-10-30" },
-  { id: "u-1049", name: "Ngô Khánh Linh", email: "linh.skincare@gmail.com", plan: "creator-pro", role: "editor", status: "suspended", credits: 21, creditQuota: 60, projects: 67, joinedAt: "2026-02-11" },
-  { id: "u-1050", name: "Đặng Hải Nam", email: "namdang.food@gmail.com", plan: "starter", role: "viewer", status: "active", credits: 9, creditQuota: 10, projects: 5, joinedAt: "2026-08-26" },
-  { id: "u-1051", name: "Trịnh Bảo Ngọc", email: "ngoc.fashionista@gmail.com", plan: "creator-pro", role: "editor", status: "active", credits: 33, creditQuota: 60, projects: 74, joinedAt: "2026-04-06" },
-  { id: "u-1052", name: "Lý Trung Kiên", email: "kien.giadung@gmail.com", plan: "starter", role: "viewer", status: "active", credits: 2, creditQuota: 10, projects: 2, joinedAt: "2026-08-28" },
-];
 
 export type TransactionMethod = "qr" | "bank" | "card" | "affiliate";
 export type TransactionStatus = "success" | "pending" | "failed";

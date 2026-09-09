@@ -6,30 +6,70 @@ interface ApiErrorBody {
   details?: { reason?: string };
 }
 
-/**
- * Client dùng chung cho mọi trang admin đọc dữ liệu thật từ `apps/api`.
- * Lỗi được bóc từ JSON format thống nhất của backend để hiện đúng nguyên nhân.
- */
-export const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+/** Lỗi có kèm HTTP status để nơi gọi phân biệt 401 với lỗi nghiệp vụ. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+const AUTH_PATHS = ["/auth/refresh", "/auth/google", "/auth/logout"];
+let refreshInFlight: Promise<boolean> | null = null;
+
+const refreshSession = (): Promise<boolean> => {
+  refreshInFlight ??= fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+  })
+    .then((response) => response.ok)
+    .catch(() => false)
+    .finally(() => {
+      refreshInFlight = null;
+    });
+
+  return refreshInFlight;
+};
+
+const send = (path: string, init?: RequestInit): Promise<Response> => {
   // FormData phải để trình duyệt tự sinh Content-Type kèm multipart boundary;
   // gán tay "application/json" sẽ làm server không tách được file.
   const isFormData =
     typeof FormData !== "undefined" && init?.body instanceof FormData;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  return fetch(`${API_BASE_URL}${path}`, {
     ...init,
     cache: "no-store",
+    credentials: "include",
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init?.headers,
     },
   });
+};
+export const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  let response = await send(path, init);
+  if (response.status === 401 && !AUTH_PATHS.includes(path)) {
+    if (await refreshSession()) {
+      response = await send(path, init);
+    }
+  }
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
     const reason = body?.details?.reason ?? body?.message;
-    throw new Error(reason ?? `API ${path} trả về ${response.status}`);
+    throw new ApiError(
+      reason ?? `API ${path} trả về ${response.status}`,
+      response.status,
+    );
   }
+
+  // 204 No Content không có thân phản hồi để parse.
+  if (response.status === 204) return undefined as T;
 
   return (await response.json()) as T;
 };

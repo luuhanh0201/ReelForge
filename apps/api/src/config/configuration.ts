@@ -34,13 +34,58 @@ export interface CredentialsConfig {
   activeVersion: number;
 }
 
+export interface AuthConfig {
+  /** Khoá ký access token (HS256). Đổi khoá này = mọi người bị đăng xuất. */
+  jwtSecret: string;
+  /** Tuổi thọ access token, tính bằng giây. */
+  accessTtlSec: number;
+  /** Tuổi thọ refresh token của user thường, tính bằng giây. */
+  refreshTtlSec: number;
+  /** Refresh token của tài khoản nội bộ sống ngắn hơn user thường. */
+  adminRefreshTtlSec: number;
+  /** Phiên admin không refresh quá khoảng này (giây) thì bị thu hồi. */
+  adminIdleTimeoutSec: number;
+  /** Cửa sổ ân hạn (giây) cho refresh token vừa bị xoay — tránh giết phiên khi nhiều tab cùng refresh. */
+  rotationGraceSec: number;
+  /** Số phiên tối đa mỗi tài khoản; vượt thì thu hồi phiên cũ nhất. */
+  maxSessionsPerUser: number;
+  /** Domain đặt cho cookie. Để trống ở local; production dùng '.reelforge.vn'. */
+  cookieDomain?: string;
+  /** Bật cờ Secure cho cookie — luôn bật ở production. */
+  cookieSecure: boolean;
+  /**
+   * OAuth client của Google. Không bắt buộc lúc khởi động — thiếu thì chỉ luồng đăng nhập
+   * báo lỗi rõ ràng, giống cách credential Google TTS được xử lý, thay vì chặn cả API.
+   */
+  google: {
+    clientId?: string;
+    clientSecret?: string;
+  };
+  /** Email Google được cấp role admin ngay lần đăng nhập đầu. */
+  bootstrapAdminEmails: string[];
+}
+
+export interface MailConfig {
+  /** Thiếu host hoặc from thì tính năng gửi mail tự tắt, chỉ ghi log. */
+  host?: string;
+  port: number;
+  user?: string;
+  password?: string;
+  /** Địa chỉ người gửi, ví dụ 'ReelForge <no-reply@reelforge.vn>'. */
+  from?: string;
+}
+
 export interface AppConfig {
   nodeEnv: string;
   isProduction: boolean;
   port: number;
+  /** Origin của apps/web — dùng cho CORS và kiểm tra Origin chống CSRF. */
+  webOrigin: string;
   database: DatabaseConfig;
   redis: RedisConfig;
   credentials: CredentialsConfig;
+  auth: AuthConfig;
+  mail: MailConfig;
 }
 
 const required = (key: string): string => {
@@ -174,6 +219,67 @@ const buildCredentialsConfig = (): CredentialsConfig => {
   };
 };
 
+/**
+ * Nhận "15m", "30d", "45s", "2h" hoặc số giây thuần. Trả về số giây.
+ * Viết ở đây thay vì dùng chuỗi thẳng của jsonwebtoken vì cùng một giá trị còn phải
+ * dùng cho Max-Age của cookie và TTL của Redis — cả hai đều cần số.
+ */
+const toSeconds = (value: string | undefined, fallback: number): number => {
+  const raw = value?.trim();
+  if (!raw) return fallback;
+
+  const match = /^(\d+)\s*([smhd])?$/.exec(raw);
+  if (!match) {
+    throw new Error(
+      `Thời hạn "${raw}" sai định dạng, cần dạng 15m / 2h / 30d hoặc số giây`,
+    );
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2] ?? 's';
+  const multiplier = { s: 1, m: 60, h: 3600, d: 86_400 }[unit] ?? 1;
+
+  return amount * multiplier;
+};
+
+/**
+ * Cấu hình xác thực. `AUTH_JWT_SECRET` bắt buộc vì thiếu nó thì token ký bằng khoá rỗng —
+ * lỗi lặng lẽ nguy hiểm hơn nhiều so với việc app không khởi động được.
+ */
+const buildAuthConfig = (isProduction: boolean): AuthConfig => ({
+  jwtSecret: required('AUTH_JWT_SECRET'),
+  accessTtlSec: toSeconds(process.env.AUTH_ACCESS_TTL, 15 * 60),
+  refreshTtlSec: toSeconds(process.env.AUTH_REFRESH_TTL, 30 * 86_400),
+  adminRefreshTtlSec: toSeconds(process.env.AUTH_ADMIN_REFRESH_TTL, 7 * 86_400),
+  adminIdleTimeoutSec: toSeconds(process.env.AUTH_ADMIN_IDLE_TIMEOUT, 30 * 60),
+  rotationGraceSec: toSeconds(process.env.AUTH_ROTATION_GRACE, 30),
+  maxSessionsPerUser: toNumber(process.env.AUTH_MAX_SESSIONS_PER_USER, 10),
+  cookieDomain: process.env.AUTH_COOKIE_DOMAIN?.trim() || undefined,
+  cookieSecure: process.env.AUTH_COOKIE_SECURE
+    ? process.env.AUTH_COOKIE_SECURE === 'true'
+    : isProduction,
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID?.trim() || undefined,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || undefined,
+  },
+  bootstrapAdminEmails: (process.env.AUTH_BOOTSTRAP_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter((email) => email !== ''),
+});
+
+/**
+ * SMTP là tuỳ chọn: thiếu cấu hình thì cảnh báo bảo mật chỉ ghi ra log server chứ không
+ * làm app chết. Đăng nhập không bao giờ được phụ thuộc vào máy chủ mail.
+ */
+const buildMailConfig = (): MailConfig => ({
+  host: process.env.SMTP_HOST?.trim() || undefined,
+  port: toNumber(process.env.SMTP_PORT, 587),
+  user: process.env.SMTP_USER?.trim() || undefined,
+  password: process.env.SMTP_PASSWORD?.trim() || undefined,
+  from: process.env.SMTP_FROM?.trim() || undefined,
+});
+
 export const configuration = (): AppConfig => {
   const nodeEnv = process.env.NODE_ENV ?? 'development';
   const isProduction = nodeEnv === 'production';
@@ -182,8 +288,11 @@ export const configuration = (): AppConfig => {
     nodeEnv,
     isProduction,
     port: toNumber(process.env.PORT, 3001),
+    webOrigin: process.env.WEB_ORIGIN?.trim() || 'http://localhost:3000',
     database: buildDatabaseConfig(),
     redis: buildRedisConfig(),
     credentials: buildCredentialsConfig(),
+    auth: buildAuthConfig(isProduction),
+    mail: buildMailConfig(),
   };
 };

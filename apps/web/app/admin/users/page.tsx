@@ -1,16 +1,35 @@
 "use client";
 
-import { Coins, Download, Lock, Pencil, Search, UserPlus, Unlock } from "lucide-react";
-import { useMemo, useState } from "react";
 import {
-  ADMIN_USERS,
+  Coins,
+  Download,
+  Loader2,
+  Lock,
+  LogOut,
+  MonitorSmartphone,
+  Pencil,
+  Search,
+  ShieldAlert,
+  Unlock,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ROLE_LABEL } from "@/config/admin/accounts.config";
+import {
+  PLAN_ACCENT,
   PLAN_LABEL,
-  ROLE_LABEL,
-  type AdminUser,
+  PLAN_ORDER,
   type UserPlan,
-  type UserRole,
-} from "@/config/admin/accounts.config";
+} from "@/config/plans.config";
 import { usePagination } from "@/lib/admin/pagination";
+import {
+  fetchAdminUsers,
+  fetchUserSessions,
+  revokeUserSessions,
+  updateAdminUser,
+  type AdminUserEntry,
+} from "@/lib/admin/users-api";
+import type { SessionEntry, UserRole } from "@/lib/auth-api";
+import { DEVICE_TYPE_LABEL, describeRelativeTime } from "@/lib/device-label";
 import {
   AdminButton,
   AdminCard,
@@ -30,11 +49,10 @@ import { useToast } from "@/components/admin/toast";
 type PlanFilter = UserPlan | "all";
 type StatusFilter = "all" | "active" | "suspended";
 
+/** Dựng từ `PLAN_ORDER` để thêm gói mới là bộ lọc tự có, không phải sửa hai chỗ. */
 const PLAN_OPTIONS: { id: PlanFilter; label: string }[] = [
   { id: "all", label: "Tất cả gói" },
-  { id: "starter", label: "Starter" },
-  { id: "creator-pro", label: "Creator Pro" },
-  { id: "agency", label: "Agency" },
+  ...PLAN_ORDER.map((plan) => ({ id: plan, label: PLAN_LABEL[plan].vi })),
 ];
 
 const STATUS_OPTIONS: { id: StatusFilter; label: string }[] = [
@@ -44,12 +62,11 @@ const STATUS_OPTIONS: { id: StatusFilter; label: string }[] = [
 ];
 
 const ROLE_OPTIONS: { id: UserRole; label: string }[] = [
-  { id: "admin", label: "Admin" },
-  { id: "editor", label: "Editor" },
+  { id: "user", label: "Người dùng" },
   { id: "viewer", label: "Viewer" },
+  { id: "editor", label: "Editor" },
+  { id: "admin", label: "Admin" },
 ];
-
-const PLAN_ACCENT = { starter: "info", "creator-pro": "brand", agency: "voice" } as const;
 
 const downloadFile = (filename: string, content: string, type: string) => {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -60,19 +77,56 @@ const downloadFile = (filename: string, content: string, type: string) => {
   URL.revokeObjectURL(url);
 };
 
+const formatDate = (iso: string | null): string =>
+  iso ? new Date(iso).toLocaleDateString("vi-VN") : "—";
+
+/**
+ * Quản trị người dùng — đọc ghi dữ liệu thật từ `/admin/users`.
+ *
+ * Tài khoản chỉ sinh ra qua đăng nhập Google nên **không có nút tạo tay**; đổi lại
+ * trang này quản lý được thứ trước đây không nhìn thấy: các thiết bị đang đăng nhập.
+ */
 export default function UsersPage() {
   const toast = useToast();
-  const [users, setUsers] = useState<AdminUser[]>(ADMIN_USERS);
+  const [users, setUsers] = useState<AdminUserEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [plan, setPlan] = useState<PlanFilter>("all");
   const [status, setStatus] = useState<StatusFilter>("all");
-  const [creditTarget, setCreditTarget] = useState<AdminUser | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const [creditTarget, setCreditTarget] = useState<AdminUserEntry | null>(null);
   const [creditAmount, setCreditAmount] = useState("10");
-  const [editTarget, setEditTarget] = useState<AdminUser | null>(null);
-  const [editRole, setEditRole] = useState<UserRole>("editor");
-  const [lockTarget, setLockTarget] = useState<AdminUser | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "" });
+  const [editTarget, setEditTarget] = useState<AdminUserEntry | null>(null);
+  const [editRole, setEditRole] = useState<UserRole>("user");
+  const [lockTarget, setLockTarget] = useState<AdminUserEntry | null>(null);
+  const [sessionTarget, setSessionTarget] = useState<AdminUserEntry | null>(null);
+  const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchAdminUsers()
+      .then((items) => {
+        if (!cancelled) setUsers(items);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setLoadError(
+            cause instanceof Error ? cause.message : "Không đọc được danh sách người dùng",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(
     () =>
@@ -95,93 +149,124 @@ export default function UsersPage() {
 
   const pagination = usePagination(filtered);
 
-  const applyCredits = (delta: number) => {
+  /** Ghi thay đổi lên API rồi thay đúng một dòng trong bảng bằng bản server trả về. */
+  const applyUpdate = async (
+    user: AdminUserEntry,
+    payload: Parameters<typeof updateAdminUser>[1],
+    successMessage: string,
+    tone: "success" | "warning" = "success",
+  ) => {
+    setSaving(true);
+    try {
+      const updated = await updateAdminUser(user.id, payload);
+      setUsers((current) =>
+        current.map((row) => (row.id === updated.id ? updated : row)),
+      );
+      toast(successMessage, tone);
+      return true;
+    } catch (cause) {
+      toast(cause instanceof Error ? cause.message : "Không lưu được thay đổi", "danger");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const applyCredits = async (delta: number) => {
     if (!creditTarget) return;
+
     const amount = Number(creditAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       toast("Số credits phải là số dương", "warning");
       return;
     }
 
-    setUsers((current) =>
-      current.map((user) =>
-        user.id === creditTarget.id
-          ? { ...user, credits: Math.max(0, user.credits + delta * amount) }
-          : user,
-      ),
-    );
-    toast(
+    const next = Math.max(0, creditTarget.credits + delta * amount);
+    const done = await applyUpdate(
+      creditTarget,
+      { credits: next },
       `${delta > 0 ? "Đã cộng" : "Đã trừ"} ${amount} credits cho ${creditTarget.name}`,
       delta > 0 ? "success" : "warning",
     );
-    setCreditTarget(null);
+
+    if (done) setCreditTarget(null);
   };
 
-  const saveRole = () => {
+  const saveRole = async () => {
     if (!editTarget) return;
-    setUsers((current) =>
-      current.map((user) =>
-        user.id === editTarget.id ? { ...user, role: editRole } : user,
-      ),
+
+    const done = await applyUpdate(
+      editTarget,
+      { role: editRole },
+      `${editTarget.name} giờ có quyền ${ROLE_LABEL[editRole]}`,
     );
-    toast(`${editTarget.name} giờ có quyền ${ROLE_LABEL[editRole]}`);
-    setEditTarget(null);
+
+    if (done) setEditTarget(null);
   };
 
-  const toggleLock = () => {
+  const toggleLock = async () => {
     if (!lockTarget) return;
-    const nextStatus = lockTarget.status === "active" ? "suspended" : "active";
 
-    setUsers((current) =>
-      current.map((user) =>
-        user.id === lockTarget.id ? { ...user, status: nextStatus } : user,
-      ),
-    );
-    toast(
-      `${nextStatus === "suspended" ? "Đã khóa" : "Đã mở khóa"} tài khoản ${lockTarget.name}`,
+    const nextStatus = lockTarget.status === "active" ? "suspended" : "active";
+    const done = await applyUpdate(
+      lockTarget,
+      { status: nextStatus },
+      nextStatus === "suspended"
+        ? `Đã khóa tài khoản ${lockTarget.name} và thu hồi mọi phiên đăng nhập`
+        : `Đã mở khóa tài khoản ${lockTarget.name}`,
       nextStatus === "suspended" ? "warning" : "success",
     );
-    setLockTarget(null);
+
+    if (done) setLockTarget(null);
   };
 
-  const addUser = () => {
-    if (!newUser.email.includes("@") || newUser.name.trim() === "") {
-      toast("Cần nhập đủ họ tên và email hợp lệ", "warning");
-      return;
+  const openSessions = async (user: AdminUserEntry) => {
+    setSessionTarget(user);
+    setSessions([]);
+    setSessionsLoading(true);
+
+    try {
+      setSessions(await fetchUserSessions(user.id));
+    } catch (cause) {
+      toast(cause instanceof Error ? cause.message : "Không đọc được phiên", "danger");
+    } finally {
+      setSessionsLoading(false);
     }
+  };
 
-    const created: AdminUser = {
-      id: `u-${1053 + users.length}`,
-      name: newUser.name.trim(),
-      email: newUser.email.trim(),
-      plan: "starter",
-      role: "viewer",
-      status: "active",
-      credits: 10,
-      creditQuota: 10,
-      projects: 0,
-      joinedAt: new Date().toISOString().slice(0, 10),
-    };
+  const revokeSessions = async () => {
+    if (!sessionTarget) return;
 
-    setUsers((current) => [created, ...current]);
-    setNewUser({ name: "", email: "" });
-    setAddOpen(false);
-    toast(`Đã tạo tài khoản ${created.name} với 10 credits`);
+    setSaving(true);
+    try {
+      const { revoked } = await revokeUserSessions(sessionTarget.id);
+      setUsers((current) =>
+        current.map((row) =>
+          row.id === sessionTarget.id ? { ...row, activeSessions: 0 } : row,
+        ),
+      );
+      toast(`Đã thu hồi ${revoked} phiên của ${sessionTarget.name}`, "warning");
+      setSessionTarget(null);
+    } catch (cause) {
+      toast(cause instanceof Error ? cause.message : "Không thu hồi được phiên", "danger");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const exportCsv = () => {
-    const header = "ID,Họ tên,Email,Gói,Quyền,Trạng thái,Credits,Dự án,Ngày tham gia";
+    const header = "ID,Họ tên,Email,Gói,Quyền,Trạng thái,Credits,Thiết bị,Đăng nhập gần nhất";
     const rows = filtered.map((user) =>
       [
         user.id,
         user.name,
         user.email,
-        PLAN_LABEL[user.plan],
+        PLAN_LABEL[user.plan].vi,
         ROLE_LABEL[user.role],
         user.status === "active" ? "Hoạt động" : "Bị khóa",
         user.credits,
-        user.projects,
-        user.joinedAt,
+        user.activeSessions,
+        formatDate(user.lastLoginAt),
       ].join(","),
     );
 
@@ -193,20 +278,20 @@ export default function UsersPage() {
     <>
       <AdminPageHeader
         title="Quản trị người dùng"
-        description="Danh sách KOC, Creator và doanh nghiệp đang dùng ReelForge."
+        description="Tài khoản đăng nhập bằng Google, kèm thiết bị đang mở phiên."
         actions={
-          <>
-            <AdminButton onClick={exportCsv}>
-              <Download size={14} />
-              Xuất danh sách
-            </AdminButton>
-            <AdminButton variant="primary" onClick={() => setAddOpen(true)}>
-              <UserPlus size={14} />
-              Thêm người dùng
-            </AdminButton>
-          </>
+          <AdminButton onClick={exportCsv} disabled={filtered.length === 0}>
+            <Download size={14} />
+            Xuất danh sách
+          </AdminButton>
         }
       />
+
+      {loadError ? (
+        <AdminCard>
+          <p className="text-sm text-ink">{loadError}</p>
+        </AdminCard>
+      ) : null}
 
       <AdminCard padded={false}>
         <div className="flex flex-wrap items-center gap-2 border-b border-line p-4">
@@ -226,20 +311,20 @@ export default function UsersPage() {
             options={STATUS_OPTIONS}
           />
           <p className="ml-auto text-xs text-muted">
-            {filtered.length}/{users.length} tài khoản
+            {loading ? "Đang tải..." : `${filtered.length}/${users.length} tài khoản`}
           </p>
         </div>
 
         <DataTable
-          headers={["Người dùng", "Gói & quyền", "Credits", "Dự án", "Tham gia", "Thao tác"]}
-          isEmpty={filtered.length === 0}
+          headers={["Người dùng", "Gói & quyền", "Credits", "Thiết bị", "Đăng nhập", "Thao tác"]}
+          isEmpty={!loading && filtered.length === 0}
         >
           {pagination.items.map((user) => (
             <TableRow key={user.id}>
               <TableCell>
                 <div className="flex items-center gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-[#10151e]">
-                    {user.name.charAt(0)}
+                    {user.name.charAt(0).toUpperCase()}
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
@@ -250,7 +335,9 @@ export default function UsersPage() {
 
               <TableCell>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <Pill accent={PLAN_ACCENT[user.plan]}>{PLAN_LABEL[user.plan]}</Pill>
+                  <Pill accent={PLAN_ACCENT[user.plan]}>
+                    {PLAN_LABEL[user.plan].vi}
+                  </Pill>
                   <span className="text-xs text-muted">{ROLE_LABEL[user.role]}</span>
                 </div>
                 <StatusBadge
@@ -260,25 +347,27 @@ export default function UsersPage() {
                 />
               </TableCell>
 
-              <TableCell className="w-40">
-                <p className="font-mono text-sm font-bold text-ink">
-                  {user.credits}
-                  <span className="text-xs font-medium text-muted">/{user.creditQuota}</span>
-                </p>
-                <div className="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-subtle">
-                  <div
-                    className={`h-full rounded-full ${user.credits === 0 ? "bg-danger" : "bg-mint"}`}
-                    style={{
-                      width: `${Math.min(100, Math.round((user.credits / user.creditQuota) * 100))}%`,
-                    }}
-                  />
-                </div>
+              <TableCell className="font-mono text-sm font-bold text-ink">
+                {user.credits}
               </TableCell>
 
-              <TableCell className="font-mono text-sm">{user.projects}</TableCell>
+              <TableCell>
+                <button
+                  type="button"
+                  onClick={() => void openSessions(user)}
+                  className="inline-flex items-center gap-1.5 rounded-btn px-1.5 py-1 font-mono text-sm text-ink transition-colors hover:bg-subtle"
+                  title="Xem thiết bị đang đăng nhập"
+                >
+                  <MonitorSmartphone
+                    size={15}
+                    className={user.activeSessions > 0 ? "text-mint" : "text-muted"}
+                  />
+                  {user.activeSessions}
+                </button>
+              </TableCell>
 
               <TableCell className="whitespace-nowrap font-mono text-xs text-muted">
-                {user.joinedAt}
+                {formatDate(user.lastLoginAt)}
               </TableCell>
 
               <TableCell>
@@ -286,7 +375,7 @@ export default function UsersPage() {
                   <AdminButton
                     variant="ghost"
                     className="w-9 px-0"
-                    title="Cộng credits"
+                    title="Điều chỉnh credits"
                     onClick={() => {
                       setCreditTarget(user);
                       setCreditAmount("10");
@@ -329,10 +418,10 @@ export default function UsersPage() {
         description={`Số dư hiện tại: ${creditTarget?.credits ?? 0} credits.`}
         footer={
           <>
-            <AdminButton variant="danger" onClick={() => applyCredits(-1)}>
+            <AdminButton variant="danger" disabled={saving} onClick={() => void applyCredits(-1)}>
               Trừ bớt
             </AdminButton>
-            <AdminButton variant="primary" onClick={() => applyCredits(1)}>
+            <AdminButton variant="primary" disabled={saving} onClick={() => void applyCredits(1)}>
               Nạp thêm
             </AdminButton>
           </>
@@ -348,13 +437,13 @@ export default function UsersPage() {
         open={editTarget !== null}
         onClose={() => setEditTarget(null)}
         title={`Phân quyền · ${editTarget?.name ?? ""}`}
-        description="Quyền áp dụng ngay sau khi lưu."
+        description="Quyền áp dụng ngay ở request kế tiếp của người dùng đó."
         footer={
           <>
             <AdminButton variant="ghost" onClick={() => setEditTarget(null)}>
               Huỷ
             </AdminButton>
-            <AdminButton variant="primary" onClick={saveRole}>
+            <AdminButton variant="primary" disabled={saving} onClick={() => void saveRole()}>
               Lưu
             </AdminButton>
           </>
@@ -375,7 +464,7 @@ export default function UsersPage() {
         title={lockTarget?.status === "active" ? "Khóa tài khoản?" : "Mở khóa tài khoản?"}
         description={
           lockTarget?.status === "active"
-            ? `${lockTarget?.name} sẽ không thể đăng nhập và mọi job đang chạy sẽ bị dừng.`
+            ? `${lockTarget?.name} sẽ bị đăng xuất khỏi mọi thiết bị và không đăng nhập lại được.`
             : `${lockTarget?.name} sẽ đăng nhập và dùng credits trở lại bình thường.`
         }
         footer={
@@ -385,7 +474,8 @@ export default function UsersPage() {
             </AdminButton>
             <AdminButton
               variant={lockTarget?.status === "active" ? "danger" : "primary"}
-              onClick={toggleLock}
+              disabled={saving}
+              onClick={() => void toggleLock()}
             >
               Xác nhận
             </AdminButton>
@@ -394,44 +484,75 @@ export default function UsersPage() {
       >
         <p className="text-sm text-muted">
           Hành động này được ghi vào nhật ký kiểm toán ở mức{" "}
-          <span className="font-bold text-danger">CRITICAL</span>.
+          <span className="font-bold text-danger">WARNING</span>.
         </p>
       </AdminModal>
 
       <AdminModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        title="Thêm người dùng thủ công"
-        description="Tài khoản mới mặc định gói Starter, quyền Viewer và được tặng 10 credits."
+        open={sessionTarget !== null}
+        onClose={() => setSessionTarget(null)}
+        title={`Thiết bị đăng nhập · ${sessionTarget?.name ?? ""}`}
+        description="Thu hồi sẽ đăng xuất tài khoản này khỏi mọi thiết bị ngay lập tức."
         footer={
           <>
-            <AdminButton variant="ghost" onClick={() => setAddOpen(false)}>
-              Huỷ
+            <AdminButton variant="ghost" onClick={() => setSessionTarget(null)}>
+              Đóng
             </AdminButton>
-            <AdminButton variant="primary" onClick={addUser}>
-              Tạo tài khoản
+            <AdminButton
+              variant="danger"
+              disabled={saving || sessions.length === 0}
+              onClick={() => void revokeSessions()}
+            >
+              <LogOut size={14} />
+              Thu hồi tất cả
             </AdminButton>
           </>
         }
       >
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted">Họ tên</span>
-            <AdminInput
-              ariaLabel="Họ tên"
-              value={newUser.name}
-              onChange={(value) => setNewUser((current) => ({ ...current, name: value }))}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted">Email</span>
-            <AdminInput
-              ariaLabel="Email"
-              value={newUser.email}
-              onChange={(value) => setNewUser((current) => ({ ...current, email: value }))}
-            />
-          </label>
-        </div>
+        {sessionsLoading ? (
+          <p className="flex items-center gap-2 text-sm text-muted">
+            <Loader2 size={15} className="animate-spin text-brand" />
+            Đang tải danh sách thiết bị...
+          </p>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-muted">Tài khoản này không có phiên nào đang mở.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {sessions.map((session) => (
+              <li
+                key={session.id}
+                className={`rounded-btn border px-3 py-2 ${
+                  session.isNewDevice
+                    ? "border-amber/40 bg-amber/[0.06]"
+                    : "border-line bg-canvas"
+                }`}
+              >
+                <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+                  {session.deviceLabel}
+                  <span className="text-xs font-medium text-muted">
+                    {DEVICE_TYPE_LABEL[session.deviceType]}
+                  </span>
+                  {session.isNewDevice ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber/15 px-2 py-0.5 text-[11px] font-bold text-amber">
+                      <ShieldAlert size={11} />
+                      Thiết bị mới
+                    </span>
+                  ) : null}
+                </p>
+                <p className="mt-0.5 font-mono text-xs text-muted">
+                  {session.ip ?? "Không rõ IP"}
+                  {session.lastIp !== null && session.lastIp !== session.ip
+                    ? ` → ${session.lastIp}`
+                    : ""}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Đăng nhập {describeRelativeTime(session.createdAt)} · hoạt động{" "}
+                  {describeRelativeTime(session.lastUsedAt)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </AdminModal>
     </>
   );

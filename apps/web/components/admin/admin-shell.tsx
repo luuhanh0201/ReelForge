@@ -1,24 +1,87 @@
 "use client";
 
-import { ArrowLeft, Menu, Moon, PanelLeftClose, Search, Sun } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  LogOut,
+  Menu,
+  Moon,
+  PanelLeftClose,
+  Search,
+  Sun,
+} from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { ROLE_LABEL } from "@/config/admin/accounts.config";
 import { ADMIN_BRAND, ADMIN_NAV } from "@/config/admin/nav.config";
 import { useApp } from "@/lib/app-provider";
+import { isStaff, USER_HOME } from "@/lib/auth-api";
+import { L } from "@/lib/i18n";
 import { AdminInput } from "@/components/admin/primitives";
 import { ToastProvider } from "@/components/admin/toast";
+import { AuthModal } from "@/components/auth/auth-modal";
+import { StatusScreen } from "@/components/layout/status-screen";
 
 /**
  * Khung admin: sidebar cố định 280px + vùng nội dung cuộn độc lập.
  * Sidebar co gọn thành overlay dưới 1280px (laptop nhỏ / tablet).
  */
 export function AdminShell({ children }: { children: ReactNode }) {
-  const { theme, toggleTheme } = useApp();
+  const { theme, toggleTheme, user, authLoading, openAuth, signOut } = useApp();
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
   const BrandIcon = ADMIN_BRAND.icon;
+
+  // Chờ biết được người dùng là ai rồi mới quyết định — nếu không, khung admin sẽ loé
+  // lên một nhịp trước khi bị thay bằng màn hình 403.
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-canvas">
+        <Loader2 size={22} className="animate-spin text-brand" />
+      </div>
+    );
+  }
+
+  /*
+   * Chốt chặn ở tầng giao diện cho người không có quyền. Đây **không phải** lớp bảo vệ
+   * dữ liệu: mọi endpoint `/admin/*` của API đã tự đòi vai nội bộ, kể cả khi ai đó gọi
+   * thẳng bằng curl.
+   */
+  if (!isStaff(user)) {
+    return (
+      <>
+        <StatusScreen
+          status="forbidden"
+          title={L("Khu vực quản trị nội bộ", "Internal admin area")}
+          description={
+            user
+              ? L(
+                  "Tài khoản của bạn không có quyền vào khu quản trị. Liên hệ quản trị viên nếu bạn cần quyền truy cập.",
+                  "Your account does not have admin access. Contact an administrator if you need it.",
+                )
+              : L(
+                  "Trang này chỉ dành cho tài khoản nội bộ của ReelForge. Đăng nhập bằng tài khoản có quyền quản trị để tiếp tục.",
+                  "This area is for ReelForge staff accounts. Sign in with an account that has admin access.",
+                )
+          }
+          // Đã đăng nhập nhưng không đủ quyền thì lối ra là khu vực của họ, không phải
+          // mời đăng nhập lại bằng chính tài khoản vừa bị từ chối.
+          primaryLabel={
+            user ? L("Vào Studio", "Open Studio") : undefined
+          }
+          onPrimary={
+            user
+              ? () => router.push(USER_HOME)
+              : () => openAuth("signin", pathname)
+          }
+        />
+        <AuthModal />
+      </>
+    );
+  }
 
   const sidebar = (
     <div className="flex h-full w-[280px] shrink-0 flex-col border-r border-line bg-surface">
@@ -111,26 +174,54 @@ export function AdminShell({ children }: { children: ReactNode }) {
         ))}
       </nav>
 
+      {/* Danh tính người đang đăng nhập — lấy thẳng từ phiên, không phải chỗ nào khác. */}
       <div className="border-t border-line px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-xs font-bold text-[#10151e]">
-            {ADMIN_BRAND.operator.initial}
-          </span>
+          {user?.avatarUrl ? (
+            // Ảnh Google là URL ngoài và chỉ 32px, dùng <img> để khỏi phải khai báo
+            // remote pattern cho next/image chỉ vì một chỗ này.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.avatarUrl}
+              alt=""
+              width={32}
+              height={32}
+              referrerPolicy="no-referrer"
+              className="h-8 w-8 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-[#10151e]">
+              {user?.name.charAt(0).toUpperCase() ?? "?"}
+            </span>
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-ink">
-              {ADMIN_BRAND.operator.name}
+              {user?.name ?? "Chưa đăng nhập"}
             </p>
-            <p className="truncate text-[11px] text-muted">{ADMIN_BRAND.operator.role}</p>
+            <p className="truncate text-[11px] text-muted">
+              {user ? `${ROLE_LABEL[user.role]} · ${user.email}` : ""}
+            </p>
           </div>
         </div>
 
-        <Link
-          href="/"
-          className="mt-3 flex items-center justify-center gap-1.5 rounded-btn border border-line bg-subtle px-3 py-2 text-xs font-semibold text-muted transition-colors hover:text-ink"
-        >
-          <ArrowLeft size={14} />
-          Về trang chủ
-        </Link>
+        <div className="mt-3 flex gap-2">
+          <Link
+            href="/"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-btn border border-line bg-subtle px-3 py-2 text-xs font-semibold text-muted transition-colors hover:text-ink"
+          >
+            <ArrowLeft size={14} />
+            Về trang chủ
+          </Link>
+          <button
+            type="button"
+            onClick={signOut}
+            title="Đăng xuất"
+            aria-label="Đăng xuất"
+            className="flex items-center justify-center rounded-btn border border-line bg-subtle px-3 py-2 text-muted transition-colors hover:border-danger/40 hover:text-danger"
+          >
+            <LogOut size={14} />
+          </button>
+        </div>
       </div>
     </div>
   );

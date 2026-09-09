@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -12,7 +13,14 @@ import {
   type ReactNode,
 } from "react";
 import type { AuthMode } from "@/config/content.config";
-import { AUTH_CONFIG } from "@/config/site.config";
+import {
+  fetchCurrentUser,
+  resolveRedirect,
+  signInWithGoogleCode,
+  signOut as signOutRequest,
+  type AuthUser,
+} from "@/lib/auth-api";
+import { requestGoogleAuthCode } from "@/lib/google-identity";
 import { translate, type Locale, type Localized } from "@/lib/i18n";
 import {
   getPreferences,
@@ -23,19 +31,13 @@ import {
 } from "@/lib/preferences";
 
 export type { Theme };
-
-export type AuthProvider = "google" | "email";
-
-export interface DemoUser {
-  name: string;
-  email: string;
-  credits: number;
-  plan: "free" | "pro";
-  provider: AuthProvider;
-}
+export type { AuthUser };
 
 /** Trạng thái bắt tay OAuth để nút hiển thị spinner. */
 export type GoogleAuthStatus = "idle" | "connecting";
+
+/** Giữ khớp với `matcher` của `middleware.ts`. */
+const PRIVATE_PREFIXES = ["/admin", "/studio"];
 
 interface AppContextValue {
   locale: Locale;
@@ -44,18 +46,26 @@ interface AppContextValue {
   t: (value: Localized) => string;
   theme: Theme;
   toggleTheme: () => void;
-  user: DemoUser | null;
+  user: AuthUser | null;
+  /** Chưa biết đã đăng nhập hay chưa — lần hỏi `/auth/me` đầu tiên đang chạy. */
+  authLoading: boolean;
   authOpen: boolean;
   /** Modal mở ở chế độ đăng nhập hay đăng ký. */
   authMode: AuthMode;
-  openAuth: (mode?: AuthMode) => void;
+  /**
+   * `redirectTo` là nơi người dùng đang muốn tới khi bị chặn ở cửa. Bỏ trống thì sau khi
+   * đăng nhập họ được đưa về khu vực ứng với vai của mình.
+   */
+  openAuth: (mode?: AuthMode, redirectTo?: string | null) => void;
   setAuthMode: (mode: AuthMode) => void;
   closeAuth: () => void;
   googleStatus: GoogleAuthStatus;
+  /** Lỗi của lần đăng nhập gần nhất, hiện ngay trong AuthModal. */
+  authError: string | null;
   signInWithGoogle: () => void;
-  /** `name` chỉ có ở luồng đăng ký; đăng nhập thì lấy phần trước @ của email. */
-  signInWithEmail: (email: string, name?: string) => void;
   signOut: () => void;
+  /** Cập nhật lại hồ sơ sau khi người dùng tự đổi thứ gì đó (thu hồi phiên chẳng hạn). */
+  refreshUser: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -66,11 +76,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getPreferences,
     getServerPreferences,
   );
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [googleStatus, setGoogleStatus] = useState<GoogleAuthStatus>("idle");
-  const connectTimer = useRef<number | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  /** Đường dẫn người dùng bị chặn khi vào, giữ lại để trả họ về đúng chỗ sau đăng nhập. */
+  const redirectAfterSignIn = useRef<string | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -81,12 +96,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = locale;
   }, [locale]);
 
-  useEffect(
-    () => () => {
-      if (connectTimer.current !== null) window.clearTimeout(connectTimer.current);
-    },
-    [],
-  );
+  /**
+   * Khôi phục phiên khi mở trang. Cookie là HttpOnly nên JS không đọc được trạng thái
+   * đăng nhập — cách duy nhất để biết là hỏi API.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchCurrentUser()
+      .then((current) => {
+        if (!cancelled) setUser(current);
+      })
+      .catch(() => {
+        // Chưa đăng nhập là trạng thái bình thường, không phải lỗi để hiện lên UI.
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAuthLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const setLocale = useCallback(
     (next: Locale) => updatePreferences({ locale: next }),
@@ -98,46 +130,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [theme],
   );
 
-  const openAuth = useCallback((mode: AuthMode = "signin") => {
-    setAuthMode(mode);
-    setAuthOpen(true);
-  }, []);
+  const openAuth = useCallback(
+    (mode: AuthMode = "signin", redirectTo: string | null = null) => {
+      redirectAfterSignIn.current = redirectTo;
+      setAuthMode(mode);
+      setAuthError(null);
+      setAuthOpen(true);
+    },
+    [],
+  );
   const closeAuth = useCallback(() => setAuthOpen(false), []);
 
   /**
-   * Mô phỏng OAuth 1 chạm: chờ "bắt tay" rồi nhận diện sẵn tài khoản demo,
-   * cấp huy hiệu Pro và cộng credits khởi tạo. Chưa nối backend thật.
+   * Đăng nhập Google thật: mở popup lấy authorization code rồi để backend đổi code.
+   * Trình duyệt nhận cookie phiên, ở đây chỉ giữ hồ sơ hiển thị.
    */
   const signInWithGoogle = useCallback(() => {
-    if (connectTimer.current !== null) return;
+    if (googleStatus === "connecting") return;
 
     setGoogleStatus("connecting");
-    connectTimer.current = window.setTimeout(() => {
-      setUser({
-        ...AUTH_CONFIG.demoGoogleAccount,
-        credits: AUTH_CONFIG.googleBonusCredits,
-        plan: "pro",
-        provider: "google",
-      });
-      setGoogleStatus("idle");
-      setAuthOpen(false);
-      connectTimer.current = null;
-    }, AUTH_CONFIG.connectDelayMs);
-  }, []);
+    setAuthError(null);
 
-  const signInWithEmail = useCallback((email: string, name?: string) => {
-    const [handle] = email.split("@");
-    setUser({
-      name: name?.trim() || (handle ? handle.slice(0, 24) : "Creator"),
-      email,
-      credits: AUTH_CONFIG.emailSignupCredits,
-      plan: "free",
-      provider: "email",
-    });
-    setAuthOpen(false);
-  }, []);
+    requestGoogleAuthCode()
+      .then(signInWithGoogleCode)
+      .then((current) => {
+        setUser(current);
+        setAuthOpen(false);
 
-  const signOut = useCallback(() => setUser(null), []);
+        // Admin và nhân sự nội bộ vào thẳng khu quản trị, khách vào Studio — trừ khi họ
+        // đang muốn tới một trang cụ thể thì trả họ về đúng trang đó.
+        const target = resolveRedirect(current, redirectAfterSignIn.current);
+        redirectAfterSignIn.current = null;
+
+        if (target !== pathname) router.push(target);
+      })
+      .catch((error: unknown) => {
+        setAuthError(
+          error instanceof Error ? error.message : "Đăng nhập Google thất bại",
+        );
+      })
+      .finally(() => setGoogleStatus("idle"));
+  }, [googleStatus, router, pathname]);
+
+  const signOut = useCallback(() => {
+    // Xoá trạng thái ngay để giao diện phản hồi tức thì; cookie do backend dọn.
+    setUser(null);
+    void signOutRequest().catch(() => undefined);
+
+    // Đang đứng trong khu vực cần đăng nhập thì phải rời đi, nếu không người vừa đăng
+    // xuất sẽ ngồi nhìn màn hình 403 của chính trang họ vừa dùng.
+    if (PRIVATE_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+      router.push("/");
+    }
+  }, [router, pathname]);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      setUser(await fetchCurrentUser());
+    } catch {
+      setUser(null);
+    }
+  }, []);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -147,15 +200,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       theme,
       toggleTheme,
       user,
+      authLoading,
       authOpen,
       authMode,
       openAuth,
       setAuthMode,
       closeAuth,
       googleStatus,
+      authError,
       signInWithGoogle,
-      signInWithEmail,
       signOut,
+      refreshUser,
     }),
     [
       locale,
@@ -163,14 +218,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       theme,
       toggleTheme,
       user,
+      authLoading,
       authOpen,
       authMode,
       openAuth,
       closeAuth,
       googleStatus,
+      authError,
       signInWithGoogle,
-      signInWithEmail,
       signOut,
+      refreshUser,
     ],
   );
 

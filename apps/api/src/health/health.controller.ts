@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { Redis } from 'ioredis';
 import { DataSource } from 'typeorm';
 import { BusinessException } from '../common/exceptions/business.exception.js';
+import { Public } from '../auth/public.decorator.js';
 import { REDIS_CLIENT } from '../redis/redis.constants.js';
 
 type DependencyStatus = 'up' | 'down';
@@ -13,6 +14,8 @@ interface HealthResponse {
   dependencies: Record<'database' | 'redis', DependencyStatus>;
 }
 
+/** Công khai: monitoring và load balancer phải gọi được mà không cần token. */
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(

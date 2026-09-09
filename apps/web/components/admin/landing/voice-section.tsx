@@ -194,20 +194,25 @@ export function VoiceSection({
                 </label>
               ) : null}
 
-              <AdminButton
-                className="mt-4"
-                onClick={() => void preview(slot.id, value.voiceId, speed)}
-                disabled={voices.length === 0}
-              >
-                {playing === slot.id ? (
-                  <Pause size={14} />
-                ) : voices.length === 0 ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Play size={14} />
-                )}
-                {playing === slot.id ? "Dừng" : "Nghe thử"}
-              </AdminButton>
+              {/*
+                Thẻ "Đánh giá" có thêm thanh tốc độ nên cao hơn hai thẻ kia; `mt-auto`
+                đẩy nút xuống đáy để ba nút Nghe thử luôn thẳng hàng (grid stretch).
+              */}
+              <div className="mt-auto pt-4">
+                <AdminButton
+                  onClick={() => void preview(slot.id, value.voiceId, speed)}
+                  disabled={voices.length === 0}
+                >
+                  {playing === slot.id ? (
+                    <Pause size={14} />
+                  ) : voices.length === 0 ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Play size={14} />
+                  )}
+                  {playing === slot.id ? "Dừng" : "Nghe thử"}
+                </AdminButton>
+              </div>
             </div>
           );
         })}

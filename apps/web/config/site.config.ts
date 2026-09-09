@@ -15,17 +15,14 @@ export const SITE = {
 
 /** Cấu hình xác thực. Chưa có backend nên đây là luồng mô phỏng phía client. */
 export const AUTH_CONFIG = {
-  /** Credits tặng thêm khi đăng nhập bằng Google (hiển thị trên huy hiệu nút). */
-  googleBonusCredits: 15,
-  /** Credits tặng khi đăng ký bằng email thường. */
-  emailSignupCredits: 10,
-  /** Thời gian mô phỏng bắt tay OAuth với Google. */
-  connectDelayMs: 1400,
-  /** Tài khoản Google mẫu được "nhận diện" trong bản mô phỏng. */
-  demoGoogleAccount: {
-    name: "Minh Anh",
-    email: "minhanh.creator@gmail.com",
-  },
+  /**
+   * Credits tặng cho tài khoản mới, hiện trên huy hiệu nút Google và trong AuthModal.
+   *
+   * Đây chỉ là con số **hiển thị**; nơi thật sự cấp credits là `GOOGLE_SIGNUP_CREDITS`
+   * trong `apps/api/src/auth/auth.service.ts`. Hai chỗ phải luôn khớp nhau, và cùng khớp
+   * với dòng "10 Credits tặng kèm khi đăng ký" của gói Free trong bảng giá.
+   */
+  googleBonusCredits: 10,
 } as const;
 
 export const STORAGE_KEYS = {

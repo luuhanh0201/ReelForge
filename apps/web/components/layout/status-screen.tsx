@@ -18,6 +18,9 @@ interface StatusScreenProps {
   status: StatusPageKey;
   /** Ghi đè nhãn nút chính (ví dụ đổi theo trạng thái đăng nhập). */
   primaryLabel?: Localized;
+  /** Ghi đè tiêu đề và mô tả — cùng mã 403 nhưng khu quản trị và Studio nói chuyện khác nhau. */
+  title?: Localized;
+  description?: Localized;
   /** Có onPrimary thì nút chính là button, không thì là link về trang chủ. */
   onPrimary?: () => void;
 }
@@ -29,6 +32,8 @@ interface StatusScreenProps {
 export function StatusScreen({
   status: statusKey,
   primaryLabel,
+  title,
+  description,
   onPrimary,
 }: StatusScreenProps) {
   const { t } = useApp();
@@ -61,10 +66,10 @@ export function StatusScreen({
           </span>
 
           <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-ink sm:text-4xl">
-            {t(status.title)}
+            {t(title ?? status.title)}
           </h1>
           <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-muted">
-            {t(status.description)}
+            {t(description ?? status.description)}
           </p>
 
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">

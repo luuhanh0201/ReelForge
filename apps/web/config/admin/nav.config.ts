@@ -8,6 +8,7 @@ import {
   FileSliders,
   KeyRound,
   LayoutDashboard,
+  MonitorSmartphone,
   Mic2,
   Receipt,
   ScrollText,
@@ -92,7 +93,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
   },
   {
     id: "landing_cms",
-    title: "Quản trị Landing Page & Giao diện",
+    title: "Quản trị Landing Page",
     badge: "CMS Live",
     items: [
       {
@@ -171,6 +172,12 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         icon: KeyRound,
       },
       {
+        id: "sessions",
+        label: "Thiết bị đăng nhập",
+        href: "/admin/sessions",
+        icon: MonitorSmartphone,
+      },
+      {
         id: "logs",
         label: "Nhật ký hệ thống",
         href: "/admin/logs",
@@ -186,9 +193,9 @@ export const ADMIN_NAV: AdminNavGroup[] = [
   },
 ];
 
+/** Danh tính người quản trị **không** nằm ở đây — sidebar lấy thẳng từ phiên đăng nhập. */
 export const ADMIN_BRAND = {
   title: "ReelForge Admin",
   subtitle: "AI Command Center",
   icon: Cpu,
-  operator: { name: "Minh Anh", role: "Super Admin", initial: "M" },
 } as const;

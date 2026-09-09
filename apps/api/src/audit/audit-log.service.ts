@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { auditContext } from './audit-context.js';
 import { AdminAuditLog, type AuditLevel } from './admin-audit-log.entity.js';
 
 export interface AuditEntry {
@@ -13,8 +14,11 @@ export interface AuditEntry {
   metadata?: Record<string, unknown>;
 }
 
-/** Chưa có auth: mọi thao tác đều quy về một actor duy nhất. */
-export const LOCAL_ACTOR = 'local-admin';
+/**
+ * Dùng khi request không có người dùng đăng nhập (tác vụ nền, endpoint công khai).
+ * Thao tác của người thật luôn lấy được email từ `auditContext`.
+ */
+export const SYSTEM_ACTOR = 'system';
 
 @Injectable()
 export class AuditLogService {
@@ -33,9 +37,13 @@ export class AuditLogService {
     try {
       // Dựng entity trực tiếp thay vì object literal: cột jsonb không khớp kiểu
       // DeepPartial mà insert() yêu cầu.
+      // Lời gọi nào truyền actor/ip tường minh thì tôn trọng; còn lại lấy từ ngữ cảnh
+      // request để 25 chỗ ghi nhật ký rải rác không phải tự luồn thông tin người dùng.
+      const context = auditContext.getStore();
+
       const log = new AdminAuditLog();
-      log.actor = entry.actor ?? LOCAL_ACTOR;
-      log.ip = entry.ip ?? null;
+      log.actor = entry.actor ?? context?.email ?? SYSTEM_ACTOR;
+      log.ip = entry.ip ?? context?.ip ?? null;
       log.action = entry.action;
       log.target = entry.target;
       log.level = entry.level;

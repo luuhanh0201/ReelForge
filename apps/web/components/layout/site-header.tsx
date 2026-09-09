@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { PLAN_LABEL } from "@/config/plans.config";
 import { NAV_LINKS, SITE } from "@/config/site.config";
 import { useApp } from "@/lib/app-provider";
 import { L } from "@/lib/i18n";
@@ -92,11 +93,12 @@ export function SiteHeader() {
 
           {user ? (
             <div className="flex items-center gap-2">
-              {user.plan === "pro" ? (
-                <span className="hidden rounded-btn bg-brand px-2 py-1.5 text-[10px] font-bold tracking-wide text-[#10151e] xl:inline-flex">
-                  PRO
+              {/* Gói Free không có huy hiệu — chỉ gói trả phí mới cần khoe. */}
+              {user.plan === "free" ? null : (
+                <span className="hidden rounded-btn bg-brand px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#10151e] xl:inline-flex">
+                  {t(PLAN_LABEL[user.plan])}
                 </span>
-              ) : null}
+              )}
 
               <span className="hidden items-center gap-1.5 rounded-btn border border-mint/30 bg-mint/10 px-2.5 py-1.5 text-xs font-semibold text-mint sm:inline-flex">
                 <Coins size={14} />
@@ -112,11 +114,9 @@ export function SiteHeader() {
                 >
                   <span className="relative flex h-6 w-6 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-[#10151e]">
                     {user.name.charAt(0).toUpperCase()}
-                    {user.provider === "google" ? (
-                      <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-line bg-surface">
-                        <GoogleGlyph size={8} />
-                      </span>
-                    ) : null}
+                    <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-line bg-surface">
+                      <GoogleGlyph size={8} />
+                    </span>
                   </span>
                   <span className="hidden text-ink xl:inline">{user.name}</span>
                   <ChevronDown size={14} />
@@ -135,10 +135,7 @@ export function SiteHeader() {
                         <p className="text-sm font-semibold text-ink">{user.name}</p>
                         <p className="truncate text-xs text-muted">{user.email}</p>
                         <p className="mt-1 text-xs font-semibold text-mint">
-                          {user.plan === "pro"
-                            ? t(L("Gói Creator Pro", "Creator Pro plan"))
-                            : t(L("Gói Starter", "Starter plan"))}{" "}
-                          · {user.credits} CR
+                          {t(PLAN_LABEL[user.plan])} · {user.credits} CR
                         </p>
                       </div>
                       <a

@@ -1,6 +1,8 @@
 import { loadLandingConfig } from "@/lib/landing-config";
 import { LandingConfigProvider } from "@/lib/landing-config-provider";
+import { Suspense } from "react";
 import { AuthModal } from "@/components/auth/auth-modal";
+import { SignInPrompt } from "@/components/auth/signin-prompt";
 import { GeminiCursor } from "@/components/effects/gemini-cursor";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -43,6 +45,11 @@ export default async function LandingPage() {
         </main>
         <SiteFooter />
         <AuthModal />
+
+        {/* useSearchParams cần ranh giới Suspense trong App Router. */}
+        <Suspense fallback={null}>
+          <SignInPrompt />
+        </Suspense>
       </div>
     </LandingConfigProvider>
   );

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import { Public } from '../auth/public.decorator.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import type { LandingConfig } from './landing-config.schema.js';
 import { GoogleTranslateService } from './google-translate.service.js';
@@ -54,8 +55,9 @@ export class LandingSettingsAdminController {
 
 /**
  * Endpoint công khai cho landing page đọc lúc render.
- * Tách khỏi nhóm `/admin` để sau này gắn auth cho admin mà không chặn trang chủ.
+ * **Phải luôn `@Public()`**: trang bán hàng không bao giờ được trắng chỉ vì auth.
  */
+@Public()
 @Controller('landing-config')
 export class LandingConfigController {
   constructor(private readonly settings: LandingSettingsService) {}

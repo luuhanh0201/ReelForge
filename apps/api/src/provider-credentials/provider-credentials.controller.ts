@@ -8,15 +8,14 @@ import {
   Put,
   Req,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { Roles } from '../auth/roles.decorator.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import { MAX_CREDENTIAL_FILE_BYTES } from './google-service-account.validator.js';
 import { GoogleTtsCredentialProvider } from './google-tts-credential.provider.js';
-import { LocalOnlyGuard } from './local-only.guard.js';
 import {
   ProviderCredentialsService,
   type CredentialStatusView,
@@ -31,7 +30,7 @@ const clientIp = (request: Request): string | null => request.ip ?? null;
  * metadata đã che** — không có endpoint nào trả về credential gốc.
  */
 @Controller('admin/provider-credentials')
-@UseGuards(LocalOnlyGuard)
+@Roles('admin')
 export class ProviderCredentialsController {
   constructor(
     private readonly credentials: ProviderCredentialsService,

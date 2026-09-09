@@ -66,6 +66,30 @@ export const ERROR_CODES = {
   },
 
   /* --------------------------------------------------------------- */
+  /* Xác thực & phiên đăng nhập                                        */
+  /* --------------------------------------------------------------- */
+  SESSION_EXPIRED: {
+    status: HttpStatus.UNAUTHORIZED,
+    message: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại',
+  },
+  SESSION_REVOKED: {
+    status: HttpStatus.UNAUTHORIZED,
+    message: 'Phiên đăng nhập đã bị thu hồi',
+  },
+  ACCOUNT_SUSPENDED: {
+    status: HttpStatus.FORBIDDEN,
+    message: 'Tài khoản đã bị khoá',
+  },
+  GOOGLE_AUTH_FAILED: {
+    status: HttpStatus.UNAUTHORIZED,
+    message: 'Không xác thực được tài khoản Google',
+  },
+  GOOGLE_OAUTH_NOT_CONFIGURED: {
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: 'Đăng nhập Google chưa được cấu hình trên máy chủ',
+  },
+
+  /* --------------------------------------------------------------- */
   /* Credential nhà cung cấp ngoài                                     */
   /* Lỗi nguyên bản của provider KHÔNG được trả về client — chỉ map     */
   /* sang các mã ổn định dưới đây, chi tiết chỉ nằm trong log server.   */
