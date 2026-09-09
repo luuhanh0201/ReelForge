@@ -84,6 +84,36 @@ export const ERROR_CODES = {
     status: HttpStatus.UNAUTHORIZED,
     message: 'Không xác thực được tài khoản Google',
   },
+  EMAIL_ALREADY_REGISTERED: {
+    status: HttpStatus.CONFLICT,
+    message: 'Email này đã được đăng ký',
+  },
+  /** Dùng cho MỌI nhánh đăng nhập sai — không hé lộ email nào đã tồn tại. */
+  INVALID_CREDENTIALS: {
+    status: HttpStatus.UNAUTHORIZED,
+    message: 'Email hoặc mật khẩu không đúng',
+  },
+  EMAIL_NOT_VERIFIED: {
+    status: HttpStatus.FORBIDDEN,
+    message:
+      'Email chưa được xác minh. Chúng tôi vừa gửi lại liên kết xác minh, vui lòng kiểm tra hộp thư.',
+  },
+  INVALID_TOKEN: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Liên kết không hợp lệ hoặc đã được sử dụng',
+  },
+  TOKEN_EXPIRED: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Liên kết đã hết hạn, vui lòng yêu cầu liên kết mới',
+  },
+  IMAGE_CORRUPT: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Không đọc được ảnh này, vui lòng chọn ảnh khác',
+  },
+  INSUFFICIENT_CREDIT: {
+    status: HttpStatus.PAYMENT_REQUIRED,
+    message: 'Số dư credit không đủ để thực hiện thao tác này',
+  },
   GOOGLE_OAUTH_NOT_CONFIGURED: {
     status: HttpStatus.SERVICE_UNAVAILABLE,
     message: 'Đăng nhập Google chưa được cấu hình trên máy chủ',

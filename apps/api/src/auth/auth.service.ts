@@ -5,6 +5,7 @@ import { IsNull, LessThan, Repository } from 'typeorm';
 import type { AuthConfig } from '../config/configuration.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import { AuditLogService } from '../audit/audit-log.service.js';
+import { CreditsService } from '../credits/credits.service.js';
 import { SecurityMailService } from '../mail/security-mail.service.js';
 import { describeDevice, deviceKey, parseDevice } from './device-parser.js';
 import { TokenService } from './token.service.js';
@@ -52,12 +53,6 @@ export const toUserProfile = (user: User): UserProfile => ({
   status: user.status,
 });
 
-/**
- * Credits tặng khi đăng nhập Google lần đầu.
- * Phải khớp `AUTH_CONFIG.googleBonusCredits` ở web và số credits của gói Free trong bảng giá.
- */
-const GOOGLE_SIGNUP_CREDITS = 10;
-
 /** Thời gian giữ phiên đã hết hạn, tính bằng ngày. Xem `pruneExpiredSessions()`. */
 const SESSION_RETENTION_DAYS = 90;
 
@@ -73,6 +68,7 @@ export class AuthService {
     private readonly sessions: Repository<UserSession>,
     private readonly tokens: TokenService,
     private readonly audit: AuditLogService,
+    private readonly credits: CreditsService,
     private readonly securityMail: SecurityMailService,
     config: ConfigService,
   ) {
@@ -102,6 +98,20 @@ export class AuthService {
       throw new BusinessException('ACCOUNT_SUSPENDED');
     }
 
+    return this.openSessionFor(user, context, 'google');
+  }
+
+  /**
+   * Mở phiên cho một tài khoản đã xác thực xong, bất kể bằng cách nào.
+   *
+   * Dùng chung cho Google và email/mật khẩu để hai đường đăng nhập không trôi ra xa nhau:
+   * cùng cách phát hiện thiết bị lạ, cùng cách ghi nhật ký, cùng cách cấp token.
+   */
+  async openSessionFor(
+    user: User,
+    context: SessionContext,
+    provider: 'google' | 'password',
+  ): Promise<IssuedSession> {
     const issued = await this.openSession(user, context);
 
     user.lastLoginAt = new Date();
@@ -113,7 +123,7 @@ export class AuthService {
       level: 'info',
       actor: user.email,
       ip: context.ip,
-      metadata: { provider: 'google', sessionId: issued.sessionId },
+      metadata: { provider, sessionId: issued.sessionId },
     });
 
     return issued;
@@ -154,9 +164,18 @@ export class AuthService {
     user.role = this.auth.bootstrapAdminEmails.includes(email)
       ? 'admin'
       : 'user';
-    user.credits = GOOGLE_SIGNUP_CREDITS;
+    // Số dư luôn bắt đầu từ 0; credit thưởng được ghi qua sổ cái ngay bên dưới để mọi
+    // thay đổi số dư đều có một dòng giải thích.
+    user.credits = 0;
 
-    return this.users.save(user);
+    const saved = await this.users.save(user);
+
+    // Email của tài khoản Google đã được Google xác minh nên tặng được ngay. `refId` là
+    // id tài khoản: đăng nhập lại bao nhiêu lần cũng chỉ tặng đúng một lần.
+    const { balance } = await this.credits.grantSignupBonus(saved.id);
+    saved.credits = balance;
+
+    return saved;
   }
 
   /** Tuổi thọ refresh token phụ thuộc vai: tài khoản nội bộ sống ngắn hơn khách. */

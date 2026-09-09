@@ -75,6 +75,16 @@ export interface MailConfig {
   from?: string;
 }
 
+export interface StorageConfig {
+  /** Thiếu bất kỳ trường nào thì tính năng lưu trữ tự tắt, giống cách SMTP đang làm. */
+  accountId?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  bucket?: string;
+  /** Tên miền công khai của bucket, dùng để dựng URL cho trình duyệt tải ảnh. */
+  publicUrl?: string;
+}
+
 export interface AppConfig {
   nodeEnv: string;
   isProduction: boolean;
@@ -86,6 +96,7 @@ export interface AppConfig {
   credentials: CredentialsConfig;
   auth: AuthConfig;
   mail: MailConfig;
+  storage: StorageConfig;
 }
 
 const required = (key: string): string => {
@@ -280,6 +291,18 @@ const buildMailConfig = (): MailConfig => ({
   from: process.env.SMTP_FROM?.trim() || undefined,
 });
 
+/**
+ * Cloudflare R2. Dùng giao thức S3 nên endpoint dựng từ `accountId`.
+ * Thiếu cấu hình thì `StorageService` báo lỗi rõ ràng khi được gọi, chứ không làm app chết.
+ */
+const buildStorageConfig = (): StorageConfig => ({
+  accountId: process.env.R2_ACCOUNT_ID?.trim() || undefined,
+  accessKeyId: process.env.R2_ACCESS_KEY_ID?.trim() || undefined,
+  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY?.trim() || undefined,
+  bucket: process.env.R2_BUCKET_NAME?.trim() || undefined,
+  publicUrl: process.env.R2_PUBLIC_URL?.trim().replace(/\/$/, '') || undefined,
+});
+
 export const configuration = (): AppConfig => {
   const nodeEnv = process.env.NODE_ENV ?? 'development';
   const isProduction = nodeEnv === 'production';
@@ -294,5 +317,6 @@ export const configuration = (): AppConfig => {
     credentials: buildCredentialsConfig(),
     auth: buildAuthConfig(isProduction),
     mail: buildMailConfig(),
+    storage: buildStorageConfig(),
   };
 };

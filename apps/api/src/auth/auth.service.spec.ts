@@ -4,6 +4,10 @@ import type { Redis } from 'ioredis';
 import type { Repository } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuditLogService } from '../audit/audit-log.service.js';
+import {
+  SIGNUP_BONUS_CREDITS,
+  type CreditsService,
+} from '../credits/credits.service.js';
 import type { SecurityMailService } from '../mail/security-mail.service.js';
 import type { AuthConfig } from '../config/configuration.js';
 import { AuthService, type SessionContext } from './auth.service.js';
@@ -95,6 +99,15 @@ const build = () => {
     notify: vi.fn(async () => {}),
   } as unknown as SecurityMailService;
 
+  // Sổ cái credit có bộ test riêng chạy trên database thật; ở đây chỉ cần biết nó được
+  // gọi đúng một lần cho mỗi tài khoản mới.
+  const credits = {
+    grantSignupBonus: vi.fn(async () => ({
+      balance: SIGNUP_BONUS_CREDITS,
+      applied: true,
+    })),
+  } as unknown as CreditsService;
+
   const tokens = new TokenService(
     new JwtService({
       secret: AUTH.jwtSecret,
@@ -109,11 +122,12 @@ const build = () => {
     sessions,
     tokens,
     audit,
+    credits,
     securityMail,
     { getOrThrow: () => AUTH } as unknown as ConfigService,
   );
 
-  return { service, users, sessions, audit, tokens, securityMail };
+  return { service, users, sessions, audit, tokens, securityMail, credits };
 };
 
 const googleProfile = (email = 'creator@gmail.com') => ({
@@ -159,6 +173,8 @@ describe('AuthService — đăng nhập Google', () => {
 
     expect(harness.users.rows).toHaveLength(1);
     expect(harness.sessions.rows).toHaveLength(2);
+    // Credit dùng thử chỉ được xin cấp ở lần tạo tài khoản, không phải mỗi lần đăng nhập.
+    expect(harness.credits.grantSignupBonus).toHaveBeenCalledTimes(1);
   });
 
   it('tài khoản bị khoá thì không mở được phiên mới', async () => {

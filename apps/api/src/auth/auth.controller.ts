@@ -25,6 +25,7 @@ import {
 import { CurrentUser } from './current-user.decorator.js';
 import type { AuthenticatedUser } from './authenticated-user.type.js';
 import { describeDevice, type DeviceType } from './device-parser.js';
+import { EmailAuthService, type RegisterInput } from './email-auth.service.js';
 import { GoogleOAuthService } from './google-oauth.service.js';
 import { Public } from './public.decorator.js';
 import {
@@ -90,6 +91,7 @@ export class AuthController {
 
   constructor(
     private readonly authService: AuthService,
+    private readonly emailAuth: EmailAuthService,
     private readonly google: GoogleOAuthService,
     config: ConfigService,
   ) {
@@ -124,6 +126,92 @@ export class AuthController {
     void this.authService.pruneExpiredSessions();
 
     return { user: toUserProfile(issued.user) };
+  }
+
+  /**
+   * Đăng ký bằng email và mật khẩu.
+   *
+   * **Không mở phiên đăng nhập**: tài khoản phải xác minh email trước. Phản hồi 202 để nói
+   * rõ "đã nhận, còn một bước nữa" thay vì 201 như thể mọi thứ đã xong.
+   */
+  @Public()
+  @Post('register')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async register(
+    @Body() body: RegisterInput,
+    @Req() request: Request,
+  ): Promise<{ email: string }> {
+    await this.emailAuth.register(body, sessionContext(request));
+
+    return { email: body.email };
+  }
+
+  @Public()
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body('email') email: string,
+    @Body('password') password: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<{ user: UserProfile }> {
+    const issued = await this.emailAuth.login(
+      email,
+      password,
+      sessionContext(request),
+    );
+
+    this.applySession(response, issued);
+    void this.authService.pruneExpiredSessions();
+
+    return { user: toUserProfile(issued.user) };
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(@Body('token') token: string): Promise<{ verified: true }> {
+    await this.emailAuth.verifyEmail(token);
+
+    return { verified: true };
+  }
+
+  /**
+   * Ba endpoint dưới đây **luôn trả về 202 dù email có tồn tại hay không**.
+   * Phản hồi khác nhau sẽ biến chúng thành công cụ dò xem địa chỉ nào đã đăng ký.
+   */
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async resendVerification(@Body('email') email: string): Promise<void> {
+    await this.emailAuth.requestEmailVerification(email);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async forgotPassword(
+    @Body('email') email: string,
+    @Req() request: Request,
+  ): Promise<void> {
+    await this.emailAuth.requestPasswordReset(email, sessionContext(request));
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(
+    @Body('token') token: string,
+    @Body('password') password: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<{ reset: true }> {
+    await this.emailAuth.resetPassword(token, password, sessionContext(request));
+
+    // Đặt lại mật khẩu thu hồi mọi phiên, kể cả phiên đang gọi request này.
+    clearSessionCookies(response, this.auth);
+
+    return { reset: true };
   }
 
   @Public()

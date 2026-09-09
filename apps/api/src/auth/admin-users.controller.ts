@@ -16,6 +16,7 @@ import { Roles } from './roles.decorator.js';
 import { toSessionView, type SessionView } from './auth.controller.js';
 import {
   UsersService,
+  type AdminUserStats,
   type AdminUserView,
   type UpdateUserInput,
 } from './users.service.js';
@@ -34,6 +35,12 @@ export class AdminUsersController {
     @Query('search') search?: string,
   ): Promise<{ items: AdminUserView[] }> {
     return { items: await this.users.list(search) };
+  }
+
+  /** Đặt trước `:id` — nếu không "stats" sẽ bị hiểu là một user id và trả về 400. */
+  @Get('stats')
+  async stats(): Promise<AdminUserStats> {
+    return this.users.stats();
   }
 
   @Patch(':id')

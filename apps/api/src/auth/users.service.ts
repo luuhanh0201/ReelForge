@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, IsNull, Repository } from 'typeorm';
 import { AuditLogService } from '../audit/audit-log.service.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
+import { CreditsService } from '../credits/credits.service.js';
 import { AuthService } from './auth.service.js';
 import { TokenService } from './token.service.js';
 import {
@@ -15,6 +16,9 @@ import {
 import { UserSession } from './user-session.entity.js';
 
 /** Một dòng trong bảng quản trị người dùng. */
+/** Cách tài khoản đăng nhập được — suy từ dữ liệu thật, không lưu thành cột riêng. */
+export type AuthProvider = 'google' | 'password' | 'both' | 'none';
+
 export interface AdminUserView {
   id: string;
   name: string;
@@ -24,10 +28,23 @@ export interface AdminUserView {
   status: UserStatus;
   plan: UserPlan;
   credits: number;
+  /**
+   * Chưa xác minh thì **không đăng nhập bằng mật khẩu được** — admin cần thấy ngay để
+   * biết vì sao một tài khoản mới đăng ký mà chưa bao giờ vào được.
+   */
+  emailVerified: boolean;
+  provider: AuthProvider;
   /** Số thiết bị đang đăng nhập — cột này là lý do trang users cần biết về phiên. */
   activeSessions: number;
   lastLoginAt: Date | null;
   createdAt: Date;
+}
+
+/** Vài con số đủ rẻ để tính bằng COUNT, dùng cho huy hiệu trên sidebar. */
+export interface AdminUserStats {
+  total: number;
+  unverified: number;
+  suspended: number;
 }
 
 export interface UpdateUserInput {
@@ -35,6 +52,18 @@ export interface UpdateUserInput {
   status?: UserStatus;
   credits?: number;
 }
+
+/**
+ * `google_sub` và `password_hash` cho biết tài khoản vào được bằng đường nào.
+ * `none` là trường hợp bất thường (tạo tay trong database) nên vẫn phải hiện ra.
+ */
+const resolveProvider = (user: User): AuthProvider => {
+  if (user.googleSub && user.passwordHash) return 'both';
+  if (user.googleSub) return 'google';
+  if (user.passwordHash) return 'password';
+
+  return 'none';
+};
 
 @Injectable()
 export class UsersService {
@@ -44,6 +73,7 @@ export class UsersService {
     @InjectRepository(UserSession)
     private readonly sessions: Repository<UserSession>,
     private readonly auth: AuthService,
+    private readonly credits: CreditsService,
     private readonly tokens: TokenService,
     private readonly audit: AuditLogService,
   ) {}
@@ -83,10 +113,23 @@ export class UsersService {
       status: user.status,
       plan: user.plan,
       credits: user.credits,
+      emailVerified: user.emailVerified,
+      provider: resolveProvider(user),
       activeSessions: byUser.get(user.id) ?? 0,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
     }));
+  }
+
+  /** Đếm bằng COUNT thay vì tải hết bản ghi rồi đếm trong bộ nhớ. */
+  async stats(): Promise<AdminUserStats> {
+    const [total, unverified, suspended] = await Promise.all([
+      this.users.count(),
+      this.users.count({ where: { emailVerified: false } }),
+      this.users.count({ where: { status: 'suspended' } }),
+    ]);
+
+    return { total, unverified, suspended };
   }
 
   /**
@@ -136,17 +179,28 @@ export class UsersService {
       user.status = input.status;
     }
 
-    if (input.credits !== undefined) {
-      if (!Number.isInteger(input.credits) || input.credits < 0) {
-        throw new BusinessException('VALIDATION_FAILED', {
-          message: 'Credits phải là số nguyên không âm',
-        });
-      }
-
-      user.credits = input.credits;
+    if (input.credits !== undefined && !Number.isInteger(input.credits)) {
+      throw new BusinessException('VALIDATION_FAILED', {
+        message: 'Credits phải là số nguyên không âm',
+      });
     }
 
     const saved = await this.users.save(user);
+
+    // Số dư không được gán thẳng: admin nhập số dư *mong muốn*, hệ thống ghi phần chênh
+    // lệch thành một dòng trong sổ cái để sau này còn truy được ai đã sửa và sửa bao nhiêu.
+    if (input.credits !== undefined && input.credits !== saved.credits) {
+      const delta = input.credits - saved.credits;
+      const { balance } = await this.credits.apply({
+        userId: saved.id,
+        amount: delta,
+        type: delta > 0 ? 'admin_grant' : 'admin_deduct',
+        note: `${actor.email} chỉnh số dư về ${input.credits}`,
+        ip,
+      });
+
+      saved.credits = balance;
+    }
 
     if (input.status === 'suspended') {
       await this.auth.logoutAll(saved.id, actor.email, ip);

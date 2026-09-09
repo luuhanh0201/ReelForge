@@ -37,6 +37,64 @@ export interface SessionEntry {
   current: boolean;
 }
 
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  name: string;
+  acceptedTerms: boolean;
+}
+
+/**
+ * Đăng ký bằng email và mật khẩu.
+ *
+ * **Không trả về phiên đăng nhập**: tài khoản phải xác minh email trước, nên nơi gọi chỉ
+ * việc chuyển sang màn hình "hãy kiểm tra hộp thư".
+ */
+export const registerWithPassword = (payload: RegisterPayload): Promise<{ email: string }> =>
+  request<{ email: string }>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const loginWithPassword = async (
+  email: string,
+  password: string,
+): Promise<AuthUser> => {
+  const { user } = await request<{ user: AuthUser }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+
+  return user;
+};
+
+export const verifyEmail = (token: string): Promise<{ verified: true }> =>
+  request<{ verified: true }>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+
+export const resendVerification = (email: string): Promise<void> =>
+  request<void>("/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+
+export const requestPasswordReset = (email: string): Promise<void> =>
+  request<void>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+
+export const resetPassword = (
+  token: string,
+  password: string,
+): Promise<{ reset: true }> =>
+  request<{ reset: true }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+
 /** Đổi authorization code của Google lấy phiên. Token đi bằng cookie, không qua JS. */
 export const signInWithGoogleCode = async (code: string): Promise<AuthUser> => {
   const { user } = await request<{ user: AuthUser }>("/auth/google", {

@@ -12,11 +12,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ROLE_LABEL } from "@/config/admin/accounts.config";
 import { ADMIN_BRAND, ADMIN_NAV } from "@/config/admin/nav.config";
 import { useApp } from "@/lib/app-provider";
 import { isStaff, USER_HOME } from "@/lib/auth-api";
+import { fetchAdminUserStats } from "@/lib/admin/users-api";
 import { L } from "@/lib/i18n";
 import { AdminInput } from "@/components/admin/primitives";
 import { ToastProvider } from "@/components/admin/toast";
@@ -33,7 +34,28 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
+  /** Số tài khoản thật cho huy hiệu mục "Quản trị người dùng" — trước đây là số bịa. */
+  const [userCount, setUserCount] = useState<number | null>(null);
   const BrandIcon = ADMIN_BRAND.icon;
+
+  const staff = isStaff(user);
+
+  useEffect(() => {
+    if (!staff) return;
+
+    let cancelled = false;
+
+    fetchAdminUserStats()
+      .then((stats) => {
+        if (!cancelled) setUserCount(stats.total);
+      })
+      // Huy hiệu hỏng không đáng để hiện lỗi: sidebar vẫn dùng được bình thường.
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [staff]);
 
   // Chờ biết được người dùng là ai rồi mới quyết định — nếu không, khung admin sẽ loé
   // lên một nhịp trước khi bị thay bằng màn hình 403.
@@ -50,7 +72,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
    * dữ liệu: mọi endpoint `/admin/*` của API đã tự đòi vai nội bộ, kể cả khi ai đó gọi
    * thẳng bằng curl.
    */
-  if (!isStaff(user)) {
+  if (!staff) {
     return (
       <>
         <StatusScreen
@@ -154,7 +176,11 @@ export function AdminShell({ children }: { children: ReactNode }) {
                         }`}
                       />
                       <span className="min-w-0 truncate whitespace-nowrap">{item.label}</span>
-                      {item.badge ? (
+                      {item.id === "users" && userCount !== null ? (
+                        <span className="ml-auto shrink-0 rounded-btn bg-brand/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-brand">
+                          {userCount.toLocaleString("vi-VN")}
+                        </span>
+                      ) : item.badge ? (
                         <span
                           className={`ml-auto shrink-0 rounded-btn px-1.5 py-0.5 text-[10px] font-bold ${
                             item.comingSoon

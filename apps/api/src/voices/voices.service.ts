@@ -40,6 +40,22 @@ export interface VoiceView {
   sampleText: string;
 }
 
+/**
+ * Giọng đọc nhìn từ phía người dùng cuối.
+ *
+ * Cố ý **không** trả `providerVoiceId`, giá vốn hay lượt dùng: đó là dữ liệu vận hành,
+ * không phải thứ khách hàng cần thấy, và lộ ID nhà cung cấp là lộ luôn ta đang mua của ai.
+ */
+export interface StudioVoiceView {
+  id: string;
+  personaName: string;
+  gender: VoiceGender;
+  region: string;
+  /** Giọng không trả timepoint thì phụ đề phải chia theo độ dài ký tự. */
+  supportsTimepoints: boolean;
+  sampleText: string;
+}
+
 export interface VoiceInput {
   personaName: string;
   originName?: string;
@@ -217,6 +233,23 @@ export class VoicesService {
     });
 
     return voices.map((voice) => this.view(voice));
+  }
+
+  /** Chỉ giọng admin đã bật. Giọng chưa nghe thử không được lọt ra trang dựng video. */
+  async listEnabled(): Promise<StudioVoiceView[]> {
+    const voices = await this.repository.find({
+      where: { enabled: true },
+      order: { region: 'ASC', personaName: 'ASC' },
+    });
+
+    return voices.map((voice) => ({
+      id: voice.id,
+      personaName: voice.personaName,
+      gender: voice.gender,
+      region: voice.region,
+      supportsTimepoints: voice.supportsTimepoints,
+      sampleText: voice.sampleText,
+    }));
   }
 
   /** Giọng mới luôn tắt sẵn để buộc nghe thử trước khi mở cho người dùng. */

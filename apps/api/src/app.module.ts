@@ -12,6 +12,10 @@ import { RolesGuard } from './auth/roles.guard.js';
 import { AppService } from './app.service.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { configuration } from './config/configuration.js';
+import { CreditsModule } from './credits/credits.module.js';
+import { MediaModule } from './media/media.module.js';
+import { ProjectsModule } from './projects/projects.module.js';
+import { StorageModule } from './storage/storage.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { LandingSettingsModule } from './landing-settings/landing-settings.module.js';
@@ -33,7 +37,11 @@ import { VoicesModule } from './voices/voices.module.js';
     DatabaseModule,
     RedisModule,
     MailModule,
+    CreditsModule,
+    StorageModule,
     AuthModule,
+    ProjectsModule,
+    MediaModule,
     HealthModule,
     AuditModule,
     TtsUsageModule,

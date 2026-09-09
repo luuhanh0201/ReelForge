@@ -15,10 +15,13 @@ import {
 import type { AuthMode } from "@/config/content.config";
 import {
   fetchCurrentUser,
+  loginWithPassword,
+  registerWithPassword,
   resolveRedirect,
   signInWithGoogleCode,
   signOut as signOutRequest,
   type AuthUser,
+  type RegisterPayload,
 } from "@/lib/auth-api";
 import { requestGoogleAuthCode } from "@/lib/google-identity";
 import { translate, type Locale, type Localized } from "@/lib/i18n";
@@ -63,6 +66,10 @@ interface AppContextValue {
   /** Lỗi của lần đăng nhập gần nhất, hiện ngay trong AuthModal. */
   authError: string | null;
   signInWithGoogle: () => void;
+  /** Đăng nhập bằng email và mật khẩu. Ném lỗi để form tự hiện thông báo. */
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  /** Đăng ký. Không đăng nhập ngay — tài khoản phải xác minh email trước. */
+  register: (payload: RegisterPayload) => Promise<void>;
   signOut: () => void;
   /** Cập nhật lại hồ sơ sau khi người dùng tự đổi thứ gì đó (thu hồi phiên chẳng hạn). */
   refreshUser: () => Promise<void>;
@@ -142,6 +149,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const closeAuth = useCallback(() => setAuthOpen(false), []);
 
   /**
+   * Đưa người vừa đăng nhập tới đúng nơi của họ. Tách riêng vì cả Google lẫn
+   * email/mật khẩu đều dùng chung một luật điều hướng.
+   */
+  const completeSignIn = useCallback(
+    (current: AuthUser) => {
+      setUser(current);
+      setAuthOpen(false);
+
+      const target = resolveRedirect(current, redirectAfterSignIn.current);
+      redirectAfterSignIn.current = null;
+
+      if (target !== pathname) router.push(target);
+    },
+    [router, pathname],
+  );
+
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => {
+      setAuthError(null);
+      completeSignIn(await loginWithPassword(email, password));
+    },
+    [completeSignIn],
+  );
+
+  const register = useCallback(async (payload: RegisterPayload) => {
+    setAuthError(null);
+    await registerWithPassword(payload);
+  }, []);
+
+  /**
    * Đăng nhập Google thật: mở popup lấy authorization code rồi để backend đổi code.
    * Trình duyệt nhận cookie phiên, ở đây chỉ giữ hồ sơ hiển thị.
    */
@@ -153,24 +190,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     requestGoogleAuthCode()
       .then(signInWithGoogleCode)
-      .then((current) => {
-        setUser(current);
-        setAuthOpen(false);
-
-        // Admin và nhân sự nội bộ vào thẳng khu quản trị, khách vào Studio — trừ khi họ
-        // đang muốn tới một trang cụ thể thì trả họ về đúng trang đó.
-        const target = resolveRedirect(current, redirectAfterSignIn.current);
-        redirectAfterSignIn.current = null;
-
-        if (target !== pathname) router.push(target);
-      })
+      // Admin và nhân sự nội bộ vào thẳng khu quản trị, khách vào Studio — trừ khi họ
+      // đang muốn tới một trang cụ thể thì trả họ về đúng trang đó.
+      .then(completeSignIn)
       .catch((error: unknown) => {
         setAuthError(
           error instanceof Error ? error.message : "Đăng nhập Google thất bại",
         );
       })
       .finally(() => setGoogleStatus("idle"));
-  }, [googleStatus, router, pathname]);
+  }, [googleStatus, completeSignIn]);
 
   const signOut = useCallback(() => {
     // Xoá trạng thái ngay để giao diện phản hồi tức thì; cookie do backend dọn.
@@ -209,6 +238,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       googleStatus,
       authError,
       signInWithGoogle,
+      signInWithPassword,
+      register,
       signOut,
       refreshUser,
     }),
@@ -226,6 +257,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       googleStatus,
       authError,
       signInWithGoogle,
+      signInWithPassword,
+      register,
       signOut,
       refreshUser,
     ],

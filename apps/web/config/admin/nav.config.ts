@@ -137,7 +137,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         label: "Quản trị người dùng",
         href: "/admin/users",
         icon: Users,
-        badge: "1.840",
+        // Không đặt badge cứng ở đây: AdminShell điền số tài khoản thật lúc chạy.
       },
       {
         id: "transactions",

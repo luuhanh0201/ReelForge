@@ -1,6 +1,9 @@
 import { request } from "@/lib/admin/api-client";
 import type { SessionEntry, UserPlan, UserRole } from "@/lib/auth-api";
 
+/** Cách tài khoản đăng nhập được — máy chủ suy từ `google_sub` và `password_hash`. */
+export type AuthProvider = "google" | "password" | "both" | "none";
+
 export interface AdminUserEntry {
   id: string;
   name: string;
@@ -10,11 +13,24 @@ export interface AdminUserEntry {
   status: "active" | "suspended";
   plan: UserPlan;
   credits: number;
+  /** Chưa xác minh thì tài khoản không đăng nhập bằng mật khẩu được. */
+  emailVerified: boolean;
+  provider: AuthProvider;
   /** Số thiết bị đang đăng nhập của tài khoản này. */
   activeSessions: number;
   lastLoginAt: string | null;
   createdAt: string;
 }
+
+export interface AdminUserStats {
+  total: number;
+  unverified: number;
+  suspended: number;
+}
+
+/** Vài con số nhẹ cho huy hiệu trên sidebar. */
+export const fetchAdminUserStats = (): Promise<AdminUserStats> =>
+  request<AdminUserStats>("/admin/users/stats");
 
 export interface UpdateUserPayload {
   role?: UserRole;

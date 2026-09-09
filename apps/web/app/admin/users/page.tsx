@@ -6,6 +6,7 @@ import {
   Loader2,
   Lock,
   LogOut,
+  MailWarning,
   MonitorSmartphone,
   Pencil,
   Search,
@@ -27,6 +28,7 @@ import {
   revokeUserSessions,
   updateAdminUser,
   type AdminUserEntry,
+  type AuthProvider,
 } from "@/lib/admin/users-api";
 import type { SessionEntry, UserRole } from "@/lib/auth-api";
 import { DEVICE_TYPE_LABEL, describeRelativeTime } from "@/lib/device-label";
@@ -47,7 +49,7 @@ import { AdminModal } from "@/components/admin/admin-modal";
 import { useToast } from "@/components/admin/toast";
 
 type PlanFilter = UserPlan | "all";
-type StatusFilter = "all" | "active" | "suspended";
+type StatusFilter = "all" | "active" | "suspended" | "unverified";
 
 /** Dựng từ `PLAN_ORDER` để thêm gói mới là bộ lọc tự có, không phải sửa hai chỗ. */
 const PLAN_OPTIONS: { id: PlanFilter; label: string }[] = [
@@ -59,7 +61,17 @@ const STATUS_OPTIONS: { id: StatusFilter; label: string }[] = [
   { id: "all", label: "Mọi trạng thái" },
   { id: "active", label: "Hoạt động" },
   { id: "suspended", label: "Bị khóa" },
+  // Nhóm đáng chú ý nhất: đăng ký rồi nhưng chưa bao giờ vào được.
+  { id: "unverified", label: "Chưa xác minh email" },
 ];
+
+/** Nhãn cách đăng nhập, suy từ dữ liệu thật của tài khoản. */
+const PROVIDER_LABEL: Record<AuthProvider, string> = {
+  google: "Google",
+  password: "Mật khẩu",
+  both: "Google + mật khẩu",
+  none: "Chưa có cách đăng nhập",
+};
 
 const ROLE_OPTIONS: { id: UserRole; label: string }[] = [
   { id: "user", label: "Người dùng" },
@@ -138,11 +150,11 @@ export default function UsersPage() {
           user.email.toLowerCase().includes(keyword) ||
           user.id.toLowerCase().includes(keyword);
 
-        return (
-          matchQuery &&
-          (plan === "all" || user.plan === plan) &&
-          (status === "all" || user.status === status)
-        );
+        const matchStatus =
+          status === "all" ||
+          (status === "unverified" ? !user.emailVerified : user.status === status);
+
+        return matchQuery && (plan === "all" || user.plan === plan) && matchStatus;
       }),
     [users, query, plan, status],
   );
@@ -255,12 +267,15 @@ export default function UsersPage() {
   };
 
   const exportCsv = () => {
-    const header = "ID,Họ tên,Email,Gói,Quyền,Trạng thái,Credits,Thiết bị,Đăng nhập gần nhất";
+    const header =
+      "ID,Họ tên,Email,Xác minh,Cách đăng nhập,Gói,Quyền,Trạng thái,Credits,Thiết bị,Đăng nhập gần nhất";
     const rows = filtered.map((user) =>
       [
         user.id,
         user.name,
         user.email,
+        user.emailVerified ? "Đã xác minh" : "Chưa xác minh",
+        PROVIDER_LABEL[user.provider],
         PLAN_LABEL[user.plan].vi,
         ROLE_LABEL[user.role],
         user.status === "active" ? "Hoạt động" : "Bị khóa",
@@ -278,7 +293,7 @@ export default function UsersPage() {
     <>
       <AdminPageHeader
         title="Quản trị người dùng"
-        description="Tài khoản đăng nhập bằng Google, kèm thiết bị đang mở phiên."
+        description="Tài khoản đăng nhập bằng Google hoặc email, kèm thiết bị đang mở phiên."
         actions={
           <AdminButton onClick={exportCsv} disabled={filtered.length === 0}>
             <Download size={14} />
@@ -328,7 +343,21 @@ export default function UsersPage() {
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
-                    <p className="truncate text-xs text-muted">{user.email}</p>
+                    <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                      <span className="truncate">{user.email}</span>
+                      {user.emailVerified ? null : (
+                        <span
+                          title="Chưa xác minh email nên chưa đăng nhập bằng mật khẩu được"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber/15 px-1.5 py-0.5 text-[10px] font-bold text-amber"
+                        >
+                          <MailWarning size={10} />
+                          Chưa xác minh
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] text-muted">
+                      {PROVIDER_LABEL[user.provider]}
+                    </p>
                   </div>
                 </div>
               </TableCell>

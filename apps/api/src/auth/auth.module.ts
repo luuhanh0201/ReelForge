@@ -6,13 +6,16 @@ import type { AuthConfig } from '../config/configuration.js';
 import { AdminUsersController } from './admin-users.controller.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { EmailAuthService } from './email-auth.service.js';
 import { GoogleOAuthService } from './google-oauth.service.js';
+import { PasswordService } from './password.service.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { OriginGuard } from './origin.guard.js';
 import { RolesGuard } from './roles.guard.js';
 import { TokenService } from './token.service.js';
 import { User } from './user.entity.js';
 import { UserSession } from './user-session.entity.js';
+import { UserToken } from './user-token.entity.js';
 import { UsersService } from './users.service.js';
 
 /**
@@ -24,7 +27,7 @@ import { UsersService } from './users.service.js';
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, UserSession]),
+    TypeOrmModule.forFeature([User, UserSession, UserToken]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
@@ -41,16 +44,20 @@ import { UsersService } from './users.service.js';
   controllers: [AuthController, AdminUsersController],
   providers: [
     AuthService,
+    EmailAuthService,
     UsersService,
     TokenService,
     GoogleOAuthService,
+    PasswordService,
     JwtAuthGuard,
     RolesGuard,
     OriginGuard,
   ],
   exports: [
     AuthService,
+    EmailAuthService,
     TokenService,
+    PasswordService,
     JwtAuthGuard,
     RolesGuard,
     OriginGuard,

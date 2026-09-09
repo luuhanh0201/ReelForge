@@ -805,28 +805,67 @@ export const FAQS: { id: string; question: Localized; answer: Localized }[] = [
 
 export type AuthMode = "signin" | "signup";
 
-/**
- * Nội dung hộp đăng nhập. Google là cách đăng nhập duy nhất nên ở đây **không còn** nhãn
- * cho form email/mật khẩu — giữ lại chỉ tạo ra chữ hứa hẹn một đường đăng nhập không có.
- */
+/** Nội dung hộp đăng nhập: Google một chạm, hoặc email và mật khẩu. */
 export const AUTH_MODAL = {
   modes: {
     signin: {
       tab: L("Đăng nhập", "Sign in"),
       title: L("Chào mừng trở lại", "Welcome back"),
       description: L(
-        "Đăng nhập một chạm bằng tài khoản Google — không cần nhớ mật khẩu.",
-        "Sign in with your Google account in one tap — no password to remember.",
+        "Đăng nhập bằng Google, hoặc bằng email đã đăng ký.",
+        "Sign in with Google, or with the email you registered.",
       ),
+      submit: L("Đăng nhập", "Sign in"),
     },
     signup: {
       tab: L("Đăng ký", "Sign up"),
       title: L("Bắt đầu với ReelForge", "Get started with ReelForge"),
       description: L(
-        "Tạo tài khoản bằng Google trong 30 giây và nhận credits dùng thử ngay.",
-        "Create an account with Google in 30 seconds and get trial credits right away.",
+        "Tạo tài khoản trong 30 giây và nhận credits dùng thử ngay.",
+        "Create an account in 30 seconds and get trial credits right away.",
       ),
+      submit: L("Tạo tài khoản", "Create account"),
     },
+  },
+  fields: {
+    name: L("Tên hiển thị", "Display name"),
+    email: L("Email của bạn", "Your email"),
+    password: L("Mật khẩu", "Password"),
+    confirmPassword: L("Nhập lại mật khẩu", "Confirm password"),
+  },
+  /** Gõ mỗi phần trước @ cũng được — máy chủ tự hiểu là địa chỉ Gmail. */
+  emailHint: L("Chỉ gõ tên là đủ, ví dụ: banmai", "Just the handle works, e.g. banmai"),
+  passwordMinLength: 8,
+  passwordHint: L("Tối thiểu 8 ký tự", "At least 8 characters"),
+  forgotPassword: L("Quên mật khẩu?", "Forgot password?"),
+  divider: L("hoặc dùng email", "or use email"),
+  terms: {
+    label: L("Tôi đồng ý với", "I agree to the"),
+    linkTerms: L("Điều khoản sử dụng", "Terms of Service"),
+    and: L("và", "and"),
+    linkPrivacy: L("Chính sách bảo mật", "Privacy Policy"),
+  },
+  checkInbox: {
+    title: L("Kiểm tra hộp thư của bạn", "Check your inbox"),
+    description: L(
+      "Chúng tôi vừa gửi liên kết xác minh tới email của bạn. Bấm vào liên kết đó để kích hoạt tài khoản rồi quay lại đăng nhập.",
+      "We just sent a verification link to your email. Open it to activate your account, then come back and sign in.",
+    ),
+    resend: L("Gửi lại liên kết", "Resend link"),
+    resent: L("Đã gửi lại, hãy kiểm tra hộp thư", "Sent again — check your inbox"),
+  },
+  forgot: {
+    title: L("Đặt lại mật khẩu", "Reset your password"),
+    description: L(
+      "Nhập email đã đăng ký, chúng tôi sẽ gửi liên kết đặt lại mật khẩu.",
+      "Enter your registered email and we'll send a reset link.",
+    ),
+    submit: L("Gửi liên kết", "Send link"),
+    sent: L(
+      "Nếu email tồn tại trong hệ thống, liên kết đặt lại đã được gửi đi.",
+      "If that email exists, a reset link is on its way.",
+    ),
+    back: L("Quay lại đăng nhập", "Back to sign in"),
   },
   perks: [
     L("Xuất video 1080p không watermark", "1080p export with no watermark"),
