@@ -19,7 +19,7 @@ import {
   TablePagination,
   TableRow,
 } from "@/components/admin/primitives";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 type LevelFilter = LogLevel | "all";
 

@@ -258,6 +258,7 @@ export const buildLinesFromTemplate = (
   assetId: null;
   emphasis: string[];
   durationMs: number;
+  voiceClipId: null;
 }[] => {
   const clamped = Math.min(
     MAX_DURATION_SEC,
@@ -281,5 +282,6 @@ export const buildLinesFromTemplate = (
     assetId: null,
     emphasis: line.emphasis.map(fill),
     durationMs: SECONDS_PER_LINE * 1000,
+    voiceClipId: null,
   }));
 };

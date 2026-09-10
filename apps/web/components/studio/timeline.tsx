@@ -15,9 +15,10 @@ import {
   MIN_SCENE_MS,
   type MediaAssetView,
   type ProjectLine,
+  type VoiceClipView,
 } from "@/lib/studio/projects-api";
 import { formatTimecode } from "@/lib/studio/timecode";
-import type { Playback } from "@/lib/studio/use-playback";
+import { usePlayhead, type Playback } from "@/lib/studio/use-playback";
 
 const TRACK_LABEL_WIDTH = 116;
 
@@ -42,6 +43,9 @@ export function Timeline({
   musicVolume,
   showImage,
   showCaption,
+  voiceClips,
+  voiceMuted,
+  onToggleVoiceMuted,
   onSelect,
   onDurationChange,
   onMusicVolumeChange,
@@ -56,6 +60,9 @@ export function Timeline({
   musicVolume: number;
   showImage: boolean;
   showCaption: boolean;
+  voiceClips: VoiceClipView[];
+  voiceMuted: boolean;
+  onToggleVoiceMuted: () => void;
   onSelect: (index: number) => void;
   onDurationChange: (index: number, durationMs: number) => void;
   onMusicVolumeChange: (value: number) => void;
@@ -134,14 +141,15 @@ export function Timeline({
   };
 
   return (
-    <section className="flex h-[220px] shrink-0 flex-col border-t border-line bg-surface">
+    <section
+      data-tour="studio.timeline"
+      className="flex h-[220px] shrink-0 flex-col border-t border-line bg-surface"
+    >
       <div className="flex h-9 shrink-0 items-center gap-3 border-b border-line px-3">
         <span className="text-xs font-bold uppercase tracking-wider text-muted">
           Thước thời gian
         </span>
-        <span className="font-mono text-[11px] font-bold tabular-nums text-ink">
-          {formatTimecode(playback.timeMs)}
-        </span>
+        <TimelineClock playback={playback} />
         <span className="ml-auto font-mono text-[11px] tabular-nums text-muted">
           Tổng {formatTimecode(totalMs)}
         </span>
@@ -150,6 +158,7 @@ export function Timeline({
       <div className="flex min-h-0 flex-1">
         {/* Cột nhãn track, cố định để các track thẳng hàng khi cuộn dọc. */}
         <div
+          data-tour="studio.track-toggles"
           className="shrink-0 border-r border-line"
           style={{ width: TRACK_LABEL_WIDTH }}
         >
@@ -172,8 +181,9 @@ export function Timeline({
             icon={<Volume2 size={12} />}
             label="Giọng đọc"
             muteIcon
-            visible={false}
-            disabledReason="Chưa lồng tiếng"
+            visible={voiceClips.length > 0 && !voiceMuted}
+            disabledReason={voiceClips.length === 0 ? "Chưa lồng tiếng" : undefined}
+            onToggle={voiceClips.length > 0 ? onToggleVoiceMuted : undefined}
           />
           <TrackLabel
             icon={<Music size={12} />}
@@ -241,7 +251,15 @@ export function Timeline({
                       onClick={() => onSelect(line.index)}
                       className="flex h-full w-full items-center gap-1.5 px-1.5 text-left"
                     >
-                      {asset ? (
+                      {asset?.kind === "video" ? (
+                        <video
+                          src={asset.url}
+                          crossOrigin="anonymous"
+                          preload="metadata"
+                          muted
+                          className="h-6 w-6 shrink-0 rounded-[3px] bg-canvas object-cover"
+                        />
+                      ) : asset ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={asset.url}
@@ -255,12 +273,28 @@ export function Timeline({
                       </span>
                     </button>
 
-                    <span
-                      role="separator"
-                      aria-label={`Kéo để đổi thời lượng cảnh ${line.index + 1}`}
-                      onPointerDown={startResize(line.index, line.durationMs)}
-                      className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize bg-brand/60 hover:bg-brand"
-                    />
+                    {/*
+                      Cảnh đã lồng tiếng thì thời lượng do file audio quyết định. Để kéo
+                      được ở đây là mở đường cho chữ lệch tiếng, mà người dùng chỉ phát
+                      hiện sau khi đã xuất xong video.
+                    */}
+                    {line.voiceClipId || asset?.kind === "video" ? (
+                      <span
+                        title={
+                          asset?.kind === "video"
+                            ? "Thời lượng bám theo video của cảnh này"
+                            : "Thời lượng do file lồng tiếng quyết định"
+                        }
+                        className="absolute inset-y-0 right-0 w-1.5 bg-voice/70"
+                      />
+                    ) : (
+                      <span
+                        role="separator"
+                        aria-label={`Kéo để đổi thời lượng cảnh ${line.index + 1}`}
+                        onPointerDown={startResize(line.index, line.durationMs)}
+                        className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize bg-brand/60 hover:bg-brand"
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -291,18 +325,53 @@ export function Timeline({
               ))}
             </div>
 
-            {/* Track 3 và 4 — chưa có dữ liệu thật, nói thẳng thay vì vẽ sóng âm giả. */}
-            <EmptyTrack label="Chưa lồng tiếng — chọn giọng ở cột phải, phần tạo tiếng làm ở bước sau" />
+            {/*
+              Track 3 — giọng đọc. Khối vẽ theo **thời lượng thật của file audio**, ngắn hơn
+              khối cảnh đúng bằng khoảng lặng cuối câu; nhìn vào là thấy ngay chỗ im lặng.
+            */}
+            {voiceClips.length === 0 ? (
+              <EmptyTrack label="Chưa lồng tiếng — chọn giọng ở cột phải rồi bấm Lồng tiếng" />
+            ) : (
+              <div
+                className={`relative ${TRACK_HEIGHT} border-b border-line ${
+                  voiceMuted ? "opacity-40" : ""
+                }`}
+              >
+                {voiceClips.map((clip) => {
+                  const block = blocks[clip.index];
+                  if (!block) return null;
+
+                  return (
+                    <button
+                      key={clip.clipId}
+                      type="button"
+                      onClick={() => onSelect(clip.index)}
+                      title={`${(clip.durationMs / 1000).toFixed(1)}s`}
+                      className={`absolute inset-y-1 overflow-hidden rounded-[4px] border px-1.5 text-left ${
+                        clip.index === activeIndex
+                          ? "border-voice bg-voice/20"
+                          : "border-line bg-subtle"
+                      }`}
+                      style={{
+                        left: percent(block.startMs),
+                        width: percent(clip.durationMs),
+                      }}
+                    >
+                      <span className="font-mono text-[10px] tabular-nums text-ink">
+                        {(clip.durationMs / 1000).toFixed(1)}s
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Track 4 — chưa có thư viện nhạc; nói thẳng thay vì vẽ một khối trống. */}
             <EmptyTrack label="Chưa có thư viện nhạc nền" />
           </div>
 
           {/* Kim playhead phủ lên toàn bộ các track. */}
-          <div
-            className="pointer-events-none absolute inset-y-0 z-10 w-px bg-brand"
-            style={{ left: percent(playback.timeMs) }}
-          >
-            <span className="absolute -left-[3px] top-0 h-1.5 w-1.5 rounded-full bg-brand" />
-          </div>
+          <Playhead playback={playback} totalMs={totalMs} />
         </div>
       </div>
     </section>
@@ -315,6 +384,35 @@ export function Timeline({
  * Công tắc chỉ đổi **cách xem trước**, không đổi video sẽ xuất ra — nên track nào chưa có
  * dữ liệu thì công tắc để mờ kèm lý do, chứ không bật tắt một thứ không tồn tại.
  */
+/**
+ * Đồng hồ và kim tách thành component riêng.
+ *
+ * Chúng là hai thứ duy nhất trong thước thời gian đổi theo từng khung hình; gộp vào
+ * `Timeline` thì mọi khối cảnh và ảnh thu nhỏ cũng render lại 60 lần mỗi giây.
+ */
+function TimelineClock({ playback }: { playback: Playback }) {
+  const timeMs = usePlayhead(playback);
+
+  return (
+    <span className="font-mono text-[11px] font-bold tabular-nums text-ink">
+      {formatTimecode(timeMs)}
+    </span>
+  );
+}
+
+function Playhead({ playback, totalMs }: { playback: Playback; totalMs: number }) {
+  const timeMs = usePlayhead(playback);
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-y-0 z-10 w-px bg-brand"
+      style={{ left: `${(timeMs / Math.max(1, totalMs)) * 100}%` }}
+    >
+      <span className="absolute -left-[3px] top-0 h-1.5 w-1.5 rounded-full bg-brand" />
+    </div>
+  );
+}
+
 function TrackLabel({
   icon,
   label,

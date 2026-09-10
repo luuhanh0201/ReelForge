@@ -35,11 +35,13 @@ export interface ProjectLine {
   /**
    * Thời lượng cảnh.
    *
-   * Hiện người dùng kéo chỉnh được trên timeline. **Khi đã lồng tiếng thì giá trị này
-   * phải bằng độ dài file audio cộng đệm** — kéo tay lúc đó sẽ làm chữ lệch tiếng, nên
-   * giao diện phải khoá lại.
+   * Người dùng kéo chỉnh được **chừng nào cảnh chưa có tiếng**. Có `voiceClipId` rồi thì
+   * giá trị này bằng độ dài file audio cộng đệm và giao diện khoá lại — kéo tay lúc đó sẽ
+   * làm chữ lệch tiếng.
    */
   durationMs: number;
+  /** Đoạn tiếng đã tổng hợp cho câu này; `null` khi chưa lồng tiếng. */
+  voiceClipId: string | null;
 }
 
 /**

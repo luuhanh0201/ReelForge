@@ -7,7 +7,7 @@ import { MAX_SAMPLE_CHARS } from "@/config/admin/models.config";
 import type { LandingConfig } from "@/lib/admin/landing-cms-api";
 import { fetchVoices, previewVoice, type VoiceEntry } from "@/lib/admin/voices-api";
 import { AdminButton, AdminCard, AdminSelect, Pill } from "@/components/admin/primitives";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 /**
  * Cấu hình giọng cho ba điểm chạm âm thanh trên landing.

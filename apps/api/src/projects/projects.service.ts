@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BusinessException } from '../common/exceptions/business.exception.js';
+import { MediaAsset } from '../media/media-asset.entity.js';
 import {
   Project,
   type AspectRatio,
@@ -53,6 +54,8 @@ export class ProjectsService {
   constructor(
     @InjectRepository(Project)
     private readonly projects: Repository<Project>,
+    @InjectRepository(MediaAsset)
+    private readonly assets: Repository<MediaAsset>,
   ) {}
 
   /** Mọi truy vấn đều đi kèm `userId`: không ai đọc hay sửa được dự án của người khác. */
@@ -219,6 +222,31 @@ export class ProjectsService {
     return this.projects.save(project);
   }
 
+  /**
+   * Gắn tiếng đã tổng hợp vào các cảnh.
+   *
+   * Thời lượng cảnh **do audio quyết định** kể từ lúc này — đó là lý do `updateLine` từ
+   * chối kéo tay khi cảnh đã có `voiceClipId`. Bỏ qua quy tắc đó thì chữ và tiếng lệch
+   * nhau, và người dùng chỉ phát hiện sau khi đã xuất xong video.
+   */
+  async attachVoice(
+    id: string,
+    userId: string,
+    clips: { index: number; clipId: string; durationMs: number }[],
+  ): Promise<Project> {
+    const project = await this.findOwned(id, userId);
+    const byIndex = new Map(clips.map((clip) => [clip.index, clip]));
+
+    project.lines = project.lines.map((line) => {
+      const clip = byIndex.get(line.index);
+      if (!clip) return line;
+
+      return { ...line, voiceClipId: clip.clipId, durationMs: clip.durationMs };
+    });
+
+    return this.projects.save(project);
+  }
+
   /** Sửa thoại, đổi ảnh hoặc đổi cụm nhấn của một cảnh. */
   async updateLine(
     id: string,
@@ -242,13 +270,54 @@ export class ProjectsService {
           message: 'Lời thoại cần từ 1 đến 500 ký tự',
         });
       }
-      line.text = text;
+      if (text !== line.text) {
+        line.text = text;
+        // Tiếng đã tổng hợp là của câu cũ. Giữ lại thì phụ đề sẽ chạy trên một giọng đọc
+        // nội dung khác — hỏng theo cách người dùng chỉ phát hiện khi đã xuất video.
+        line.voiceClipId = null;
+      }
     }
 
-    if (patch.assetId !== undefined) line.assetId = patch.assetId;
+    if (patch.assetId !== undefined) {
+      line.assetId = patch.assetId;
+
+      /*
+       * Gán video vào cảnh thì lấy luôn độ dài của nó.
+       *
+       * Không làm bước này thì cảnh giữ nguyên 10 giây mặc định, video 6 giây chạy xong là
+       * đứng hình 4 giây — người dùng phải tự đi sửa một con số mà họ không có lý do gì để
+       * đoán ra. Cảnh đã lồng tiếng thì giữ nguyên, vì lúc đó tiếng mới là thứ quyết định.
+       */
+      if (patch.assetId && !line.voiceClipId) {
+        const asset = await this.assets.findOne({ where: { id: patch.assetId } });
+
+        if (asset?.kind === 'video' && asset.durationMs) {
+          line.durationMs = Math.min(20_000, Math.max(1000, asset.durationMs));
+        }
+      }
+    }
     if (patch.emphasis !== undefined) line.emphasis = patch.emphasis;
 
     if (patch.durationMs !== undefined) {
+      // Video quyết định độ dài cảnh của nó; kéo tay sẽ cắt cụt hình giữa chừng.
+      if (line.assetId) {
+        const asset = await this.assets.findOne({ where: { id: line.assetId } });
+
+        if (asset?.kind === 'video') {
+          throw new BusinessException('VALIDATION_FAILED', {
+            message:
+              'Cảnh này đang dùng video nên thời lượng bám theo chính video. Đổi sang ảnh nếu muốn tự đặt thời lượng.',
+          });
+        }
+      }
+
+      if (line.voiceClipId) {
+        throw new BusinessException('VALIDATION_FAILED', {
+          message:
+            'Cảnh này đã lồng tiếng nên thời lượng do file audio quyết định. Sửa lời thoại rồi lồng tiếng lại nếu muốn đổi.',
+        });
+      }
+
       // Chặn hai đầu: cảnh dưới 1 giây không kịp đọc hết câu, trên 20 giây thì người xem
       // lướt qua mất.
       if (
@@ -287,6 +356,7 @@ export class ProjectsService {
         assetId: null,
         emphasis: [],
         durationMs: SECONDS_PER_LINE * 1000,
+        voiceClipId: null,
       },
     ];
 
@@ -402,6 +472,8 @@ export class ProjectsService {
           ? line.emphasis.filter((item): item is string => typeof item === 'string')
           : [],
         durationMs: Math.round(line.durationMs),
+        voiceClipId:
+          typeof line.voiceClipId === 'string' ? line.voiceClipId : null,
       };
     });
 

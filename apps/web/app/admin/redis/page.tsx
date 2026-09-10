@@ -45,7 +45,7 @@ import {
 import { JobsInspector } from "@/components/admin/redis/jobs-inspector";
 import { KeyspaceBreakdown } from "@/components/admin/redis/keyspace-breakdown";
 import { QueueCards } from "@/components/admin/redis/queue-cards";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 const formatNumber = (value: number) => value.toLocaleString("vi-VN");
 

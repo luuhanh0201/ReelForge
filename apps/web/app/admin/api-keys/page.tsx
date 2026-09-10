@@ -23,7 +23,7 @@ import {
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
 import { GoogleTtsCredentialCard } from "@/components/admin/credentials/google-tts-card";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 export default function ApiKeysPage() {
   const toast = useToast();

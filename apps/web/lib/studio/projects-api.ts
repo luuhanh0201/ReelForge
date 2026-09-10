@@ -13,8 +13,10 @@ export interface ProjectLine {
   role: LineRole;
   assetId: string | null;
   emphasis: string[];
-  /** Độ dài cảnh. Còn sửa tay được vì chưa có TTS; khi có audio thật sẽ do audio quyết. */
+  /** Độ dài cảnh. Kéo tay được **chừng nào chưa lồng tiếng**; có tiếng rồi thì do audio quyết. */
   durationMs: number;
+  /** Đoạn tiếng đã tổng hợp cho câu này; `null` khi chưa lồng tiếng. */
+  voiceClipId: string | null;
 }
 
 export interface Project {
@@ -54,10 +56,17 @@ export interface StudioVoice {
   region: string;
   supportsTimepoints: boolean;
   sampleText: string;
+  /** Có bản nghe thử sẵn trong kho hay chưa. */
+  hasPreview: boolean;
 }
+
+export type MediaKind = "image" | "video" | "gif";
 
 export interface MediaAssetView {
   id: string;
+  kind: MediaKind;
+  /** Chỉ video mới có; ảnh và GIF do người dùng đặt thời lượng cảnh. */
+  durationMs: number | null;
   /** URL đã ký, sống một giờ — đủ cho một phiên chỉnh sửa. */
   url: string;
   width: number;
@@ -157,10 +166,62 @@ export const reorderLines = (id: string, order: number[]): Promise<Project> =>
 export const removeLine = (id: string, index: number): Promise<Project> =>
   request<Project>(`/projects/${id}/lines/${index}`, { method: "DELETE" });
 
+/** Một cảnh đã có tiếng, kèm đường dẫn tải về để phát và để ghép vào MP4. */
+export interface VoiceClipView {
+  index: number;
+  clipId: string;
+  /** URL đã ký, sống một giờ. */
+  url: string;
+  durationMs: number;
+  sampleRate: number;
+}
+
+export interface TtsQuota {
+  used: number;
+  /** `0` là không giới hạn. */
+  limit: number;
+}
+
+export const fetchVoiceClips = async (
+  projectId: string,
+): Promise<{ items: VoiceClipView[]; quota: TtsQuota }> =>
+  request<{ items: VoiceClipView[]; quota: TtsQuota }>(`/projects/${projectId}/voice`);
+
+/**
+ * Lồng tiếng cho cả video.
+ *
+ * `force` đọc lại **mọi** câu kể cả câu đã có tiếng — chỉ dùng khi người dùng chủ động
+ * muốn vậy, vì nó gọi lại nhà cung cấp và tốn hạn mức trong ngày.
+ */
+export const synthesizeVoice = (
+  projectId: string,
+  force = false,
+): Promise<{
+  project: Project;
+  clips: VoiceClipView[];
+  synthesized: number;
+  quota: TtsQuota;
+}> =>
+  request(`/projects/${projectId}/voice`, {
+    method: "POST",
+    body: JSON.stringify({ force }),
+  });
+
 export const fetchVoices = async (): Promise<StudioVoice[]> => {
   const { items } = await request<{ items: StudioVoice[] }>("/voices");
   return items;
 };
+
+/**
+ * Bản nghe thử của một giọng.
+ *
+ * Máy chủ **chỉ trả bản đã có sẵn**, không tổng hợp mới — nghe thử bao nhiêu lần cũng
+ * không chạm vào hoá đơn Google.
+ */
+export const fetchVoicePreview = (
+  voiceId: string,
+): Promise<{ audioBase64: string; mimeType: string; sampleText: string }> =>
+  request(`/voices/${voiceId}/preview`);
 
 export const fetchAssets = async (projectId: string): Promise<MediaAssetView[]> => {
   const { items } = await request<{ items: MediaAssetView[] }>(

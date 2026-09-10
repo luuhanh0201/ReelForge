@@ -69,10 +69,12 @@ export class GoogleTtsSynthesisService {
   private readonly logger = new Logger(GoogleTtsSynthesisService.name);
 
   /**
-   * Tổng hợp một đoạn ngắn để nghe thử.
+   * Tổng hợp một đoạn tiếng.
    *
    * **Thao tác này tốn tiền thật** theo số ký tự gửi đi, khác hẳn `listVoices` dùng cho
-   * xác minh. Vì vậy giới hạn độ dài ở đây và cooldown ở tầng service gọi vào.
+   * xác minh. Ở đây chỉ áp trần của **nhà cung cấp** (`maxCharsPerRequest`); trần theo
+   * nghiệp vụ do tầng gọi đặt, vì nghe thử một giọng và lồng tiếng cho một video là hai
+   * việc có giới hạn khác nhau — xem `MAX_SAMPLE_CHARS` ở `VoicesService`.
    */
   async synthesize(
     account: GoogleServiceAccount,
@@ -83,12 +85,6 @@ export class GoogleTtsSynthesisService {
     if (text === '') {
       throw new BusinessException('VALIDATION_FAILED', {
         message: 'Chưa có câu thoại để nghe thử',
-      });
-    }
-
-    if (text.length > MAX_SAMPLE_CHARS) {
-      throw new BusinessException('VALIDATION_FAILED', {
-        message: `Câu thoại nghe thử tối đa ${MAX_SAMPLE_CHARS} ký tự`,
       });
     }
 

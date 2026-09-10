@@ -11,9 +11,23 @@ import type { RenderConfig, Scene, SubtitleStyle } from "@repo/shared";
  * chữ đều đã nằm sẵn trong `RenderConfig`.
  */
 
-/** Ảnh đã giải mã sẵn, khoá theo `assetUrl` trong config. */
-export type ImageSource = CanvasImageSource & { width: number; height: number };
-export type ImageMap = ReadonlyMap<string, ImageSource>;
+/**
+ * Một nguồn hình đã sẵn sàng vẽ, khoá theo `assetUrl` trong config.
+ *
+ * Kích thước đi kèm tường minh chứ không đọc từ chính đối tượng: `HTMLVideoElement.width`
+ * là thuộc tính thẻ HTML, mặc định bằng 0, còn kích thước thật nằm ở `videoWidth`. Bắt nơi
+ * nạp phải khai báo rõ thì `drawFrame` không cần biết mình đang vẽ ảnh, video hay GIF.
+ */
+export interface FrameSource {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+}
+
+export type ImageMap = ReadonlyMap<string, FrameSource>;
+
+/** Giữ tên cũ cho các nơi đã dùng; là bí danh của `FrameSource`. */
+export type ImageSource = FrameSource;
 
 export interface DrawOptions {
   /** Vẽ khung an toàn của TikTok. Bật khi preview, tắt khi xuất file. */
@@ -95,8 +109,8 @@ const drawSceneImage = (
   progress: number,
   images: ImageMap,
 ): void => {
-  const image = images.get(scene.assetUrl);
-  if (!image) return;
+  const frame = images.get(scene.assetUrl);
+  if (!frame) return;
 
   const { width, height } = config.output;
   const [fromX, fromY, fromZoom] = scene.kenBurns.from;
@@ -109,17 +123,17 @@ const drawSceneImage = (
   const fit = config.template.layout.imageFit;
   const scale =
     fit === "cover"
-      ? Math.max(width / image.width, height / image.height)
+      ? Math.max(width / frame.width, height / frame.height)
       : Math.min(
-          (width * (1 - config.template.layout.padding * 2)) / image.width,
-          (height * (1 - config.template.layout.padding * 2)) / image.height,
+          (width * (1 - config.template.layout.padding * 2)) / frame.width,
+          (height * (1 - config.template.layout.padding * 2)) / frame.height,
         );
 
-  const drawWidth = image.width * scale * zoom;
-  const drawHeight = image.height * scale * zoom;
+  const drawWidth = frame.width * scale * zoom;
+  const drawHeight = frame.height * scale * zoom;
 
   ctx.drawImage(
-    image,
+    frame.source,
     width * centerX - drawWidth / 2,
     height * centerY - drawHeight / 2,
     drawWidth,

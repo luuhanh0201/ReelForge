@@ -28,7 +28,7 @@ import {
   type StatusTone,
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 const STATUS_TONE: Record<string, StatusTone> = {
   connected: "up",

@@ -1,7 +1,19 @@
 "use client";
 
-import { ImagePlus, Info, Sparkles, Trash2, Volume2, Wand2 } from "lucide-react";
-import { useRef } from "react";
+import {
+  Film,
+  ImagePlus,
+  Info,
+  Loader2,
+  Mic,
+  Pause,
+  Play,
+  Sparkles,
+  Trash2,
+  Volume2,
+  Wand2,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SUBTITLE_PRESETS, type SubtitleStyle } from "@repo/shared";
 import {
   DURATION_OPTIONS,
@@ -12,7 +24,9 @@ import {
   type ProjectLine,
   type ScriptTemplateOption,
   type StudioVoice,
+  type TtsQuota,
 } from "@/lib/studio/projects-api";
+import { useVoicePreview } from "@/lib/studio/use-voice-preview";
 
 export type PanelTab = "content" | "subtitle" | "voice";
 
@@ -62,6 +76,10 @@ export function SubtitlePanel({
   onVoiceChange,
   onSpeedChange,
   onSpeedCommit,
+  quota,
+  voicedLines,
+  synthesizing,
+  onSynthesize,
 }: {
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
@@ -92,12 +110,20 @@ export function SubtitlePanel({
   onVoiceChange: (voiceId: string | null) => void;
   onSpeedChange: (speed: number) => void;
   onSpeedCommit: (speed: number) => void;
+  quota: TtsQuota | null;
+  /** Số cảnh đã có tiếng, để nút nói đúng việc nó sắp làm. */
+  voicedLines: number;
+  synthesizing: boolean;
+  onSynthesize: (force: boolean) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
     <aside className="flex w-[320px] shrink-0 flex-col border-l border-line bg-surface">
-      <div className="flex h-11 shrink-0 items-center gap-0.5 border-b border-line px-2">
+      <div
+        data-tour="studio.panel-tabs"
+        className="flex h-11 shrink-0 items-center gap-0.5 border-b border-line px-2"
+      >
         {TABS.map((item) => (
           <button
             key={item.id}
@@ -141,6 +167,9 @@ export function SubtitlePanel({
             subtitle={subtitle}
             onChange={onSubtitleChange}
             onCommit={onSubtitleCommit}
+            speed={project.voiceSpeed}
+            onSpeedChange={onSpeedChange}
+            onSpeedCommit={onSpeedCommit}
           />
         ) : null}
 
@@ -150,8 +179,11 @@ export function SubtitlePanel({
             voiceId={project.voiceId}
             speed={project.voiceSpeed}
             onVoiceChange={onVoiceChange}
-            onSpeedChange={onSpeedChange}
-            onSpeedCommit={onSpeedCommit}
+            quota={quota}
+            totalLines={project.lines.length}
+            voicedLines={voicedLines}
+            synthesizing={synthesizing}
+            onSynthesize={onSynthesize}
           />
         ) : null}
       </div>
@@ -245,7 +277,7 @@ function ContentTab({
           ))}
         </div>
 
-        <ul className="flex flex-col gap-1.5">
+        <ul data-tour="studio.templates" className="flex flex-col gap-1.5">
           {templates.map((template) => (
             <li key={template.code}>
               <button
@@ -283,6 +315,7 @@ function ContentTab({
         <>
           <Section title={`Lời thoại cảnh ${line.index + 1}`}>
             <textarea
+              data-tour="studio.script"
               rows={5}
               value={line.text}
               maxLength={500}
@@ -336,15 +369,15 @@ function ContentTab({
         </>
       ) : null}
 
-      <Section title="Ảnh sản phẩm">
-        <div className="grid grid-cols-3 gap-1.5">
+      <Section title="Ảnh và video">
+        <div data-tour="studio.assets" className="grid grid-cols-3 gap-1.5">
           {assets.map((asset) => (
             <div key={asset.id} className="group relative">
               <button
                 type="button"
                 disabled={busy || !line}
                 onClick={() => onAssignAsset(asset.id)}
-                aria-label="Gán ảnh cho cảnh đang chọn"
+                aria-label="Gán vào cảnh đang chọn"
                 className={`block w-full overflow-hidden rounded-btn border transition-colors disabled:opacity-45 ${
                   line?.assetId === asset.id
                     ? "border-brand"
@@ -357,14 +390,40 @@ function ContentTab({
                   lại nhận bản cache cũ không có header — ảnh hỏng và video không xuất
                   được, mà lỗi chỉ lộ ra ở bước cuối.
                 */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={asset.url}
-                  alt=""
-                  crossOrigin="anonymous"
-                  className="aspect-square w-full object-cover"
-                />
+                {asset.kind === "video" ? (
+                  // Thẻ `video` không tự chạy: chỉ cần một khung tĩnh làm hình đại diện,
+                  // `preload="metadata"` đủ để trình duyệt vẽ khung đầu.
+                  <video
+                    src={asset.url}
+                    crossOrigin="anonymous"
+                    preload="metadata"
+                    muted
+                    className="aspect-square w-full bg-canvas object-cover"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={asset.url}
+                    alt=""
+                    crossOrigin="anonymous"
+                    className="aspect-square w-full object-cover"
+                  />
+                )}
               </button>
+
+              {/* Nhãn loại: video và GIF cư xử khác ảnh nên người dùng phải phân biệt được. */}
+              {asset.kind !== "image" ? (
+                <span className="pointer-events-none absolute bottom-1 left-1 inline-flex items-center gap-0.5 rounded-[4px] bg-[#10151e]/80 px-1 py-0.5 text-[9px] font-bold text-white">
+                  {asset.kind === "video" ? (
+                    <>
+                      <Film size={9} />
+                      {asset.durationMs ? `${(asset.durationMs / 1000).toFixed(1)}s` : "MP4"}
+                    </>
+                  ) : (
+                    "GIF"
+                  )}
+                </span>
+              ) : null}
 
               <button
                 type="button"
@@ -391,7 +450,7 @@ function ContentTab({
         <input
           ref={fileRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,image/gif,video/mp4"
           hidden
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -400,8 +459,9 @@ function ContentTab({
           }}
         />
 
-        <p className="mt-2 text-[11px] text-muted">
-          JPG, PNG hoặc WebP · tối thiểu 400×400 · tối đa 20MB
+        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+          Ảnh JPG, PNG, WebP hoặc GIF · tối đa 20MB. Video MP4 · tối đa 200MB và 2 phút.
+          Khung hình tối thiểu 400×400.
         </p>
       </Section>
     </>
@@ -412,10 +472,16 @@ function SubtitleTab({
   subtitle,
   onChange,
   onCommit,
+  speed,
+  onSpeedChange,
+  onSpeedCommit,
 }: {
   subtitle: Partial<SubtitleStyle>;
   onChange: (patch: Partial<SubtitleStyle>) => void;
   onCommit: (style: Partial<SubtitleStyle>) => void;
+  speed: number;
+  onSpeedChange: (speed: number) => void;
+  onSpeedCommit: (speed: number) => void;
 }) {
   /** Nút bấm và ô màu là thao tác rời rạc: đổi xong lưu luôn. */
   const apply = (patch: Partial<SubtitleStyle>) => {
@@ -429,7 +495,7 @@ function SubtitleTab({
   return (
     <>
       <Section title="Kiểu có sẵn">
-        <div className="grid grid-cols-2 gap-1.5">
+        <div data-tour="studio.subtitle-presets" className="grid grid-cols-2 gap-1.5">
           {SUBTITLE_PRESETS.map((preset) => (
             <button
               key={preset.code}
@@ -456,7 +522,7 @@ function SubtitleTab({
       </Section>
 
       <Section title="Màu chữ">
-        <div className="flex flex-col gap-2">
+        <div data-tour="studio.subtitle-colors" className="flex flex-col gap-2">
           <ColorRow
             label="Chữ thường"
             value={toHex(subtitle.color, "#FFFFFF")}
@@ -566,10 +632,81 @@ function SubtitleTab({
           ))}
         </div>
       </Section>
+
+      {/*
+        Tốc độ đọc nằm ở đây chứ không ở tab Giọng đọc, vì nó quyết định **nhịp chữ chạy
+        trên màn hình**: đọc nhanh thì mỗi từ sáng lên trong thời gian ngắn hơn, và cả cảnh
+        cũng ngắn lại theo. Đó là thứ người dùng đang canh khi họ mở tab này.
+      */}
+      <Section title="Tốc độ đọc">
+        <SliderRow
+          label="Tốc độ"
+          value={speed}
+          min={MIN_VOICE_SPEED}
+          max={MAX_VOICE_SPEED}
+          step={0.05}
+          display={`${speed.toFixed(2)}x`}
+          onChange={onSpeedChange}
+          onCommit={() => onSpeedCommit(speed)}
+        />
+
+        <div className="mt-2">
+          <Note>
+            Đổi tốc độ chỉ có tác dụng ở lần lồng tiếng sau. Các cảnh đã có tiếng vẫn giữ
+            nhịp cũ cho tới khi bạn đọc lại.
+          </Note>
+        </div>
+      </Section>
     </>
   );
 }
 
+/**
+ * Bảng màu gợi ý.
+ *
+ * Chọn theo tình huống dùng thật của phụ đề bán hàng: trắng và đen là hai màu chữ nền
+ * tảng, cam thương hiệu cho từ đang đọc, vàng cho cụm nhấn, còn lại là các màu tương phản
+ * cao vẫn đọc được khi đặt lên ảnh sản phẩm.
+ */
+const SWATCHES = [
+  "#FFFFFF",
+  "#0B0F17",
+  "#FF6B35",
+  "#F2B237",
+  "#F2545B",
+  "#35C48F",
+  "#60A5FA",
+  "#A855F7",
+  "#FF8F50",
+  "#94A3B8",
+];
+
+/** Kích thước bảng, cần biết trước để tính toạ độ `fixed` mà không phải đo sau khi vẽ. */
+const PANEL_WIDTH = 208;
+const PANEL_HEIGHT = 160;
+
+/** Chuẩn hoá thứ người dùng gõ về `#RRGGBB`; trả `null` khi chưa thành một mã màu hợp lệ. */
+const normalizeHex = (input: string): string | null => {
+  const raw = input.trim().replace(/^#/, "").toUpperCase();
+
+  // Dạng rút gọn `F0A` là cách viết tắt hợp lệ của `FF00AA`.
+  if (/^[0-9A-F]{3}$/.test(raw)) {
+    return `#${raw[0]!}${raw[0]!}${raw[1]!}${raw[1]!}${raw[2]!}${raw[2]!}`;
+  }
+
+  return /^[0-9A-F]{6}$/.test(raw) ? `#${raw}` : null;
+};
+
+/**
+ * Ô chọn màu.
+ *
+ * Bảng màu **mở sang trái** chứ không phải xuống dưới hay sang phải: panel này nằm sát mép
+ * phải cửa sổ, mọi thứ bung ra bên phải đều bị cắt mất một phần.
+ *
+ * Không dùng `input[type=color]` làm lối vào chính vì bảng chọn màu của trình duyệt tự
+ * quyết định vị trí — cũng chính là thứ đang bị cắt. Nó vẫn có mặt bên trong bảng cho ai
+ * muốn dò màu tự do, còn đường chính là ô gõ mã màu và dãy màu gợi ý.
+ */
 function ColorRow({
   label,
   value,
@@ -579,20 +716,160 @@ function ColorRow({
   value: string;
   onChange: (value: string) => void;
 }) {
+  /**
+   * Bảng dùng `position: fixed` với toạ độ đo từ nút, **không phải `absolute`**.
+   *
+   * Cột này có `overflow-y-auto`; một khối `absolute` tràn ra ngoài biên sẽ bị vùng cuộn
+   * cắt mất — nó vẫn tồn tại trong DOM, vẫn đúng z-index, nhưng không nhìn thấy gì. Đó
+   * chính là cái bẫy đã làm bảng màu biến mất.
+   */
+  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [draft, setDraft] = useState(value);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const open = anchor !== null;
+
+  // Mở bảng thì lấy lại màu hiện tại: người dùng có thể đã đổi nó bằng preset ở trên.
+  const openPanel = () => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    setDraft(value);
+    setAnchor({
+      // Canh giữa theo hàng, và kẹp lại để bảng không tràn khỏi mép trên/dưới màn hình.
+      top: Math.min(
+        Math.max(8, rect.top + rect.height / 2 - PANEL_HEIGHT / 2),
+        window.innerHeight - PANEL_HEIGHT - 8,
+      ),
+      // Mở sang **trái**: cột này nằm sát mép phải, mọi thứ bung sang phải đều bị cắt.
+      left: Math.max(8, rect.left - PANEL_WIDTH - 8),
+    });
+  };
+
+  const close = () => setAnchor(null);
+
+  const valid = normalizeHex(draft);
+
+  const commitDraft = () => {
+    if (valid) onChange(valid);
+    else setDraft(value);
+  };
+
+  // Cuộn cột đi thì bảng sẽ trôi khỏi nút vì toạ độ đã chốt lúc mở; đóng lại là đúng nhất.
+  useEffect(() => {
+    if (!open) return;
+
+    const onScroll = () => close();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open]);
+
   return (
-    <label className="flex items-center justify-between gap-2 text-xs text-ink">
-      {label}
-      <span className="flex items-center gap-2">
+    <div className="flex items-center justify-between gap-2 text-xs text-ink">
+      <span>{label}</span>
+
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => (open ? close() : openPanel())}
+        aria-expanded={open}
+        aria-label={`${label}: ${value}`}
+        className="flex items-center gap-2 rounded-btn px-1 py-0.5 transition-colors hover:bg-subtle"
+      >
         <span className="font-mono text-[10px] uppercase text-muted">{value}</span>
-        <input
-          type="color"
-          value={value}
-          onChange={(event) => onChange(event.target.value.toUpperCase())}
-          aria-label={label}
-          className="h-7 w-9 cursor-pointer rounded-btn border border-line bg-canvas p-0.5"
+        <span
+          className="h-7 w-9 rounded-btn border border-line"
+          style={{ backgroundColor: value }}
         />
-      </span>
-    </label>
+      </button>
+
+      {open ? (
+        <>
+          <button
+            type="button"
+            aria-label="Đóng bảng màu"
+            onClick={close}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+
+          <div
+            style={{ top: anchor.top, left: anchor.left, width: PANEL_WIDTH }}
+            className="fixed z-50 rounded-card border border-line bg-surface p-2.5 shadow-[0_18px_50px_-20px_rgba(0,0,0,0.6)]"
+          >
+            <p className="mb-1.5 text-[11px] font-semibold text-muted">{label}</p>
+
+            <div className="grid grid-cols-5 gap-1.5">
+              {SWATCHES.map((swatch) => (
+                <button
+                  key={swatch}
+                  type="button"
+                  onClick={() => {
+                    onChange(swatch);
+                    setDraft(swatch);
+                  }}
+                  title={swatch}
+                  aria-label={swatch}
+                  className={`h-7 w-full rounded-[4px] border transition-transform hover:scale-105 ${
+                    value.toUpperCase() === swatch
+                      ? "border-brand ring-1 ring-brand"
+                      : "border-line"
+                  }`}
+                  style={{ backgroundColor: swatch }}
+                />
+              ))}
+            </div>
+
+            <div className="mt-2.5 flex items-center gap-1.5">
+              <span className="font-mono text-xs text-muted">#</span>
+              <input
+                value={draft.replace(/^#/, "")}
+                maxLength={7}
+                spellCheck={false}
+                placeholder="FF6B35"
+                aria-label={`Mã màu cho ${label}`}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={commitDraft}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") commitDraft();
+                  if (event.key === "Escape") {
+                    event.stopPropagation();
+                    setDraft(value);
+                    close();
+                  }
+                }}
+                className={`h-8 min-w-0 flex-1 rounded-btn border bg-canvas px-2 font-mono text-xs uppercase text-ink outline-none ${
+                  valid ? "border-line focus:border-brand/50" : "border-danger/60"
+                }`}
+              />
+
+              {/* Đường phụ cho ai muốn dò màu tự do; bảng của trình duyệt tự đặt vị trí. */}
+              <input
+                type="color"
+                value={valid ?? value}
+                onChange={(event) => {
+                  const next = event.target.value.toUpperCase();
+                  setDraft(next);
+                  onChange(next);
+                }}
+                aria-label={`Chọn màu tự do cho ${label}`}
+                className="h-8 w-8 shrink-0 cursor-pointer rounded-btn border border-line bg-canvas p-0.5"
+              />
+            </div>
+
+            {valid ? null : (
+              <p className="mt-1 text-[10px] text-danger">
+                Mã màu cần 3 hoặc 6 ký tự từ 0–9 và A–F.
+              </p>
+            )}
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -649,24 +926,57 @@ function VoiceTab({
   voiceId,
   speed,
   onVoiceChange,
-  onSpeedChange,
-  onSpeedCommit,
+  quota,
+  totalLines,
+  voicedLines,
+  synthesizing,
+  onSynthesize,
 }: {
   voices: StudioVoice[];
   voiceId: string | null;
+  /** Chỉ để nghe thử đúng nhịp; thanh trượt đã chuyển sang tab Phụ đề. */
   speed: number;
   onVoiceChange: (voiceId: string | null) => void;
-  onSpeedChange: (speed: number) => void;
-  onSpeedCommit: (speed: number) => void;
+  quota: TtsQuota | null;
+  totalLines: number;
+  voicedLines: number;
+  synthesizing: boolean;
+  onSynthesize: (force: boolean) => void;
 }) {
+  const [gender, setGender] = useState<"all" | "female" | "male">("all");
+
+  const counts = useMemo(
+    () => ({
+      all: voices.length,
+      female: voices.filter((voice) => voice.gender === "female").length,
+      male: voices.filter((voice) => voice.gender === "male").length,
+    }),
+    [voices],
+  );
+
+  const filtered = useMemo(
+    () => (gender === "all" ? voices : voices.filter((voice) => voice.gender === gender)),
+    [gender, voices],
+  );
+
   // Gom theo vùng miền: người dùng chọn giọng theo "Bắc / Trung / Nam" trước, rồi mới tới tên.
-  const byRegion = voices.reduce<Record<string, StudioVoice[]>>((groups, voice) => {
+  const byRegion = filtered.reduce<Record<string, StudioVoice[]>>((groups, voice) => {
     (groups[voice.region] ??= []).push(voice);
     return groups;
   }, {});
 
+  // Chỉ có một vùng thì tiêu đề vùng chỉ tổ chiếm chỗ mà không phân biệt được gì.
+  const showRegionHeadings = Object.keys(byRegion).length > 1;
+
+  // Nghe thử lấy bản đã lưu sẵn, tốc độ áp bằng `playbackRate` nên nghe đúng tốc độ dự án.
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const preview = useVoicePreview(audioRef, speed);
+
   return (
     <>
+      {/* React sở hữu phần tử này nên rời trang là tiếng tắt theo, không cần dọn tay. */}
+      <audio ref={audioRef} onEnded={preview.handleEnded} hidden />
+
       <Section title={`Giọng đọc (${voices.length})`}>
         {voices.length === 0 ? (
           <Note>
@@ -674,36 +984,106 @@ function VoiceTab({
             trước khi trang này chọn được.
           </Note>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div data-tour="studio.voice-list" className="flex flex-col gap-3">
+            {/* Lọc theo giới tính: tiêu chí đầu tiên người dùng dùng để loại bớt danh sách. */}
+            <div className="flex gap-1">
+              {(
+                [
+                  ["all", "Tất cả"],
+                  ["female", "Giọng nữ"],
+                  ["male", "Giọng nam"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setGender(value)}
+                  aria-pressed={gender === value}
+                  className={`flex-1 rounded-btn border px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+                    gender === value
+                      ? "border-brand bg-brand/15 text-ink"
+                      : "border-line bg-canvas text-muted hover:border-brand/40"
+                  }`}
+                >
+                  {label}
+                  <span className="ml-1 font-mono tabular-nums opacity-60">
+                    {counts[value]}
+                  </span>
+                </button>
+              ))}
+            </div>
+
             {Object.entries(byRegion).map(([region, items]) => (
               <div key={region}>
-                <p className="mb-1.5 text-[11px] font-semibold text-muted">{region}</p>
+                {showRegionHeadings ? (
+                  <p className="mb-1.5 text-[11px] font-semibold text-muted">{region}</p>
+                ) : null}
                 <ul className="flex flex-col gap-1">
                   {items.map((voice) => (
                     <li key={voice.id}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onVoiceChange(voice.id === voiceId ? null : voice.id)
-                        }
-                        aria-pressed={voice.id === voiceId}
-                        className={`flex w-full items-center gap-2 rounded-btn border px-2.5 py-2 text-left transition-colors ${
+                      <span
+                        className={`flex w-full items-center gap-1 rounded-btn border pr-1 transition-colors ${
                           voice.id === voiceId
                             ? "border-brand bg-brand/10"
                             : "border-line bg-canvas hover:border-brand/40"
                         }`}
                       >
-                        <Volume2
-                          size={13}
-                          className={voice.id === voiceId ? "text-brand" : "text-muted"}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
-                          {voice.personaName}
-                        </span>
-                        <span className="shrink-0 text-[10px] text-muted">
-                          {voice.gender === "female" ? "Nữ" : "Nam"}
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onVoiceChange(voice.id === voiceId ? null : voice.id)
+                          }
+                          aria-pressed={voice.id === voiceId}
+                          className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left"
+                        >
+                          <Volume2
+                            size={13}
+                            className={voice.id === voiceId ? "text-brand" : "text-muted"}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
+                            {voice.personaName}
+                          </span>
+                          <span
+                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                              voice.gender === "female"
+                                ? "bg-voice/15 text-voice"
+                                : "bg-info/15 text-info"
+                            }`}
+                          >
+                            {voice.gender === "female" ? "Nữ" : "Nam"}
+                          </span>
+                        </button>
+
+                        {/*
+                          Nút nghe thử tách khỏi nút chọn: người dùng cần nghe vài giọng rồi
+                          mới quyết định, gộp làm một thì mỗi lần nghe lại đổi luôn giọng của
+                          cả dự án.
+                        */}
+                        {voice.hasPreview ? (
+                          <button
+                            type="button"
+                            onClick={() => void preview.toggle(voice.id)}
+                            aria-label={`Nghe thử giọng ${voice.personaName}`}
+                            title="Nghe thử — không tốn phí"
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] text-muted transition-colors hover:bg-subtle hover:text-ink"
+                          >
+                            {preview.loadingId === voice.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : preview.playingId === voice.id ? (
+                              <Pause size={12} className="text-brand" />
+                            ) : (
+                              <Play size={12} />
+                            )}
+                          </button>
+                        ) : (
+                          <span
+                            title="Giọng này chưa có bản nghe thử"
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center text-muted/30"
+                          >
+                            <Play size={12} />
+                          </span>
+                        )}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -713,23 +1093,55 @@ function VoiceTab({
         )}
       </Section>
 
-      <Section title="Tốc độ đọc">
-        <SliderRow
-          label="Tốc độ"
-          value={speed}
-          min={MIN_VOICE_SPEED}
-          max={MAX_VOICE_SPEED}
-          step={0.05}
-          display={`${speed.toFixed(2)}x`}
-          onChange={onSpeedChange}
-          onCommit={() => onSpeedCommit(speed)}
-        />
+      <Section title="Lồng tiếng">
+        <button
+          type="button"
+          data-tour="studio.synthesize"
+          disabled={synthesizing || !voiceId || totalLines === 0}
+          onClick={() => onSynthesize(false)}
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-btn bg-brand text-sm font-bold text-[#10151e] transition-colors hover:bg-brand-hover disabled:opacity-45"
+        >
+          {synthesizing ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <Mic size={15} />
+          )}
+          {voicedLines >= totalLines && totalLines > 0
+            ? "Đã lồng tiếng đủ cảnh"
+            : `Lồng tiếng ${totalLines - voicedLines}/${totalLines} cảnh còn lại`}
+        </button>
+
+        {voicedLines > 0 ? (
+          <button
+            type="button"
+            disabled={synthesizing}
+            onClick={() => onSynthesize(true)}
+            className="mt-1.5 w-full rounded-btn border border-line bg-subtle py-2 text-xs font-semibold text-muted transition-colors hover:text-ink disabled:opacity-45"
+          >
+            Đọc lại toàn bộ
+          </button>
+        ) : null}
+
+        {quota ? (
+          <p className="mt-2 text-center text-[11px] text-muted">
+            {quota.limit === 0
+              ? `Hôm nay đã lồng tiếng ${quota.used} câu · gói của bạn không giới hạn`
+              : `Hạn mức hôm nay: ${quota.used}/${quota.limit} câu`}
+          </p>
+        ) : null}
+
+        <div className="mt-2">
+          <Note>
+            Câu đã lồng tiếng sẽ được bỏ qua ở lần bấm sau, và câu trùng nội dung với người
+            khác lấy lại từ bộ nhớ đệm — cả hai đều không tính vào hạn mức. Sửa lời thoại
+            thì câu đó cần đọc lại.
+          </Note>
+        </div>
       </Section>
 
       <Note>
-        Lựa chọn giọng và tốc độ đã được lưu vào dự án. Việc tạo file tiếng và ghép vào
-        video nằm ở bước tiếp theo của hệ thống — hiện thời lượng mỗi cảnh vẫn do bạn tự
-        đặt trên thước thời gian.
+        Cảnh đã có tiếng thì thời lượng do file audio quyết định, không kéo tay trên thước
+        thời gian được nữa — kéo được thì chữ sẽ lệch tiếng.
       </Note>
     </>
   );

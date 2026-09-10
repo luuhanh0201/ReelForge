@@ -20,7 +20,7 @@ import { isStaff, USER_HOME } from "@/lib/auth-api";
 import { fetchAdminUserStats } from "@/lib/admin/users-api";
 import { L } from "@/lib/i18n";
 import { AdminInput } from "@/components/admin/primitives";
-import { ToastProvider } from "@/components/admin/toast";
+import { ToastProvider } from "@/components/ui/toast";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { StatusScreen } from "@/components/layout/status-screen";
 

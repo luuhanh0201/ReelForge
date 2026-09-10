@@ -16,7 +16,7 @@ import {
   ToggleSwitch,
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 export default function SettingsPage() {
   const toast = useToast();

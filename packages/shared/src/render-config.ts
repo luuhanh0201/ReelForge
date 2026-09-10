@@ -73,6 +73,13 @@ export const SceneSchema = z.object({
   durationMs: z.number().int().positive(),
   /** URL đã ký sẵn, máy khách tải thẳng. */
   assetUrl: z.string(),
+  /**
+   * Loại media của cảnh.
+   *
+   * `drawFrame` cần biết để chọn cách lấy khung hình: ảnh tĩnh vẽ thẳng, còn video và GIF
+   * phải được tua tới đúng mốc thời gian trước khi vẽ.
+   */
+  assetKind: z.enum(["image", "video", "gif"]).default("image"),
   /** Ken Burns: [x, y, zoom] lúc bắt đầu và lúc kết thúc cảnh. */
   kenBurns: z.object({
     from: z.tuple([z.number(), z.number(), z.number()]),

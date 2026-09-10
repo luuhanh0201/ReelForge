@@ -49,7 +49,7 @@ import {
 } from "@/components/admin/primitives";
 import { usePagination } from "@/lib/admin/pagination";
 import { AdminModal } from "@/components/admin/admin-modal";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 type GenderFilter = VoiceGender | "all";
 

@@ -51,7 +51,10 @@ export function ScenePanel({
   };
 
   return (
-    <aside className="flex w-[260px] shrink-0 flex-col border-r border-line bg-surface">
+    <aside
+      data-tour="studio.scenes"
+      className="flex w-[260px] shrink-0 flex-col border-r border-line bg-surface"
+    >
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-3">
         <span className="text-xs font-bold uppercase tracking-wider text-muted">
           Phân cảnh
@@ -173,6 +176,7 @@ export function ScenePanel({
       <div className="shrink-0 border-t border-line p-2">
         <button
           type="button"
+          data-tour="studio.add-scene"
           disabled={busy || lines.length >= maxLines}
           onClick={onAdd}
           className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-btn border border-line bg-subtle text-xs font-semibold text-ink transition-colors hover:border-brand/45 disabled:opacity-45"

@@ -36,7 +36,7 @@ import { AdminModal } from "@/components/admin/admin-modal";
 import { ActivityInspector } from "@/components/admin/database/activity-inspector";
 import { SlaMatrix } from "@/components/admin/database/sla-matrix";
 import { TableAnalyzer } from "@/components/admin/database/table-analyzer";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 const clockLabel = () => {
   const now = new Date();

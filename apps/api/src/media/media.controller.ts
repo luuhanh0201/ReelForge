@@ -15,11 +15,15 @@ import type { AuthenticatedUser } from '../auth/authenticated-user.type.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import { ProjectsService } from '../projects/projects.service.js';
-import { MAX_IMAGE_BYTES, MediaService } from './media.service.js';
+import type { MediaKind } from './media-asset.entity.js';
+import { MAX_VIDEO_BYTES, MediaService } from './media.service.js';
 
 /** Ảnh trả về cho giao diện: chỉ URL đã ký, không lộ khoá lưu trữ. */
 export interface MediaAssetView {
   id: string;
+  kind: MediaKind;
+  /** Chỉ video mới có; ảnh và GIF do người dùng đặt thời lượng cảnh. */
+  durationMs: number | null;
   url: string;
   width: number;
   height: number;
@@ -45,6 +49,8 @@ export class MediaController {
       items: await Promise.all(
         assets.map(async (asset) => ({
           id: asset.id,
+          kind: asset.kind,
+          durationMs: asset.durationMs,
           url: await this.media.signedVariantUrl(
             asset,
             project.aspectRatio,
@@ -60,7 +66,9 @@ export class MediaController {
 
   @Post()
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_BYTES, files: 1 } }),
+    // Trần ở tầng này lấy theo loại nặng nhất; `MediaService` mới là nơi áp đúng trần cho
+    // từng loại, vì phải đọc magic bytes mới biết đang nhận ảnh hay video.
+    FileInterceptor('file', { limits: { fileSize: MAX_VIDEO_BYTES, files: 1 } }),
   )
   async upload(
     @Param('projectId', ParseUUIDPipe) projectId: string,
@@ -69,7 +77,7 @@ export class MediaController {
   ): Promise<MediaAssetView> {
     if (!file?.buffer) {
       throw new BusinessException('VALIDATION_FAILED', {
-        message: 'Thiếu ảnh trong trường "file"',
+        message: 'Thiếu tệp trong trường "file"',
       });
     }
 
@@ -78,6 +86,8 @@ export class MediaController {
 
     return {
       id: asset.id,
+      kind: asset.kind,
+      durationMs: asset.durationMs,
       url: await this.media.signedVariantUrl(
         asset,
         project.aspectRatio,

@@ -15,11 +15,13 @@ import {
   fetchAssets,
   fetchProject,
   fetchScriptTemplates,
+  fetchVoiceClips,
   fetchVoices,
   MAX_LINES,
   removeLine,
   reorderLines,
   replaceLines,
+  synthesizeVoice,
   updateLine,
   updateProject,
   uploadAsset,
@@ -29,12 +31,15 @@ import {
   type ProjectLine,
   type ScriptTemplateOption,
   type StudioVoice,
+  type TtsQuota,
+  type VoiceClipView,
 } from "@/lib/studio/projects-api";
-import { buildPreviewConfig, loadImages } from "@/lib/studio/preview";
-import { pickRenderPath } from "@/lib/studio/render-path";
+import { buildPreviewConfig, loadMedia } from "@/lib/studio/preview";
+import { useExport } from "@/lib/studio/use-export";
 import { useHistory } from "@/lib/studio/use-history";
 import { useHotkeys } from "@/lib/studio/use-hotkeys";
 import { usePlayback } from "@/lib/studio/use-playback";
+import { VoiceTrack } from "@/lib/studio/use-voice-playback";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { StatusScreen } from "@/components/layout/status-screen";
 import { ScenePanel } from "@/components/studio/scene-panel";
@@ -42,6 +47,8 @@ import { Stage } from "@/components/studio/stage";
 import { SubtitlePanel, type PanelTab } from "@/components/studio/subtitle-panel";
 import { Timeline } from "@/components/studio/timeline";
 import { TopBar, type SaveState } from "@/components/studio/top-bar";
+import { TourProvider } from "@/components/tour/tour-provider";
+import { ToastProvider, useToast } from "@/components/ui/toast";
 
 /**
  * Ảnh chụp trạng thái cho hoàn tác.
@@ -63,16 +70,36 @@ interface Snapshot {
  * Trang này không cuộn: mỗi phân vùng tự cuộn phần của nó. Cả trang cuộn được thì kim
  * playhead và khung xem trước sẽ trôi khỏi tầm mắt đúng lúc người dùng cần nhìn cả hai.
  */
+/**
+ * Bọc trang bằng `ToastProvider` rồi mới tới nội dung.
+ *
+ * Thông báo phải nổi lên trên toàn bộ bố cục dock, nên nhà cung cấp phải nằm **ngoài**
+ * phần dựng bố cục — đặt bên trong thì lớp toast cũng bị mấy khung cuộn cắt mất.
+ */
 export default function StudioEditorPage() {
+  return (
+    <ToastProvider>
+      <StudioEditor />
+    </ToastProvider>
+  );
+}
+
+function StudioEditor() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
-  const { user, authLoading, openAuth } = useApp();
+  const { user, authLoading, openAuth, refreshUser } = useApp();
 
   const [project, setProject] = useState<Project | null>(null);
   const [assets, setAssets] = useState<MediaAssetView[]>([]);
   const [templates, setTemplates] = useState<ScriptTemplateOption[]>([]);
   const [voices, setVoices] = useState<StudioVoice[]>([]);
+  const [voiceClips, setVoiceClips] = useState<VoiceClipView[]>([]);
+  const [quota, setQuota] = useState<TtsQuota | null>(null);
+  const [synthesizing, setSynthesizing] = useState(false);
+  const [voiceMuted, setVoiceMuted] = useState(false);
   const [images, setImages] = useState<ImageMap>(new Map());
+  // Hàm tua video; thay mỗi khi nạp lại media, nên giữ trong state chứ không phải ref.
+  const [seekMedia, setSeekMedia] = useState<(timeMs: number) => void>(() => () => undefined);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [tab, setTab] = useState<PanelTab>("content");
@@ -85,7 +112,28 @@ export default function StudioEditorPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+
+  /**
+   * Lỗi **lúc mở dự án** vẫn là state, vì nó làm cả trang không dùng được.
+   *
+   * Một thông báo tự tắt sau hai giây không hợp ở đây: người dùng nhìn vào màn hình trống
+   * và cần biết vì sao, kể cả khi họ quay lại sau mười phút.
+   */
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  /**
+   * Lỗi của từng thao tác thì không còn là state của trang.
+   *
+   * Trước đây nó là một dải chèn giữa thanh đỉnh và khung hình, và mỗi lần hiện lên là
+   * **đẩy cả canvas trượt xuống** đúng lúc người dùng đang canh chỉnh.
+   */
+  const setError = useCallback(
+    (message: string | null) => {
+      if (message) toast(message, "danger");
+    },
+    [toast],
+  );
 
   const history = useHistory<Snapshot>();
   /**
@@ -111,19 +159,22 @@ export default function StudioEditorPage() {
       fetchAssets(projectId),
       fetchScriptTemplates(),
       fetchVoices(),
+      fetchVoiceClips(projectId),
     ])
-      .then(([loadedProject, loadedAssets, loadedTemplates, loadedVoices]) => {
+      .then(([loadedProject, loadedAssets, loadedTemplates, loadedVoices, voice]) => {
         if (cancelled) return;
 
         setProject(loadedProject);
         setAssets(loadedAssets);
         setTemplates(loadedTemplates);
         setVoices(loadedVoices);
+        setVoiceClips(voice.items);
+        setQuota(voice.quota);
         setDuration(Math.max(30, loadedProject.lines.length * 10 || 30));
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : "Không mở được dự án");
+          setLoadError(cause instanceof Error ? cause.message : "Không mở được dự án");
         }
       })
       .finally(() => {
@@ -150,10 +201,27 @@ export default function StudioEditorPage() {
   const config = useMemo(
     () =>
       project
-        ? buildPreviewConfig(project, assets, project.subtitleStyle, sceneDurations)
+        ? buildPreviewConfig(
+            project,
+            assets,
+            project.subtitleStyle,
+            sceneDurations,
+            voiceClips,
+          )
         : null,
-    [project, assets, sceneDurations],
+    [project, assets, sceneDurations, voiceClips],
   );
+
+  /** Mốc bắt đầu từng cảnh — cùng công thức với `buildPreviewConfig`, dùng để phát tiếng. */
+  const sceneStartMs = useMemo(() => {
+    const starts: number[] = [];
+
+    sceneDurations.forEach((_, index) => {
+      starts.push(index === 0 ? 0 : starts[index - 1]! + sceneDurations[index - 1]!);
+    });
+
+    return starts;
+  }, [sceneDurations]);
 
   /**
    * Chỉ tải lại ảnh khi **tập URL** đổi.
@@ -167,17 +235,31 @@ export default function StudioEditorPage() {
   );
 
   useEffect(() => {
-    if (!assetUrls) return;
+    if (!config || !assetUrls) return;
 
     let cancelled = false;
+    let mounted: HTMLElement[] = [];
 
-    void loadImages(assetUrls.split("|")).then((loaded) => {
-      if (!cancelled) setImages(loaded);
+    void loadMedia(config).then((loaded) => {
+      if (cancelled) {
+        for (const element of loaded.elements) element.remove();
+        return;
+      }
+
+      // GIF chỉ chạy hoạt ảnh khi nằm trong DOM, và video cũng cần được gắn để giải mã.
+      for (const element of loaded.elements) document.body.append(element);
+      mounted = loaded.elements;
+
+      setImages(loaded.frames);
+      setSeekMedia(() => loaded.seek);
     });
 
     return () => {
       cancelled = true;
+      for (const element of mounted) element.remove();
     };
+    // Chỉ nạp lại khi **tập tài nguyên** đổi; đổi cỡ chữ phụ đề không được tải lại video.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetUrls]);
 
   const snapshot = useCallback((): Snapshot | null => {
@@ -213,7 +295,7 @@ export default function StudioEditorPage() {
         setBusy(false);
       }
     },
-    [history, snapshot],
+    [history, setError, snapshot],
   );
 
   /** Khôi phục cả ảnh chụp trong hai lệnh, thay vì sửa lại từng cảnh một. */
@@ -239,7 +321,7 @@ export default function StudioEditorPage() {
         setBusy(false);
       }
     },
-    [projectId],
+    [projectId, setError],
   );
 
   const handleUndo = useCallback(() => {
@@ -258,18 +340,68 @@ export default function StudioEditorPage() {
     if (next) void restore(next);
   }, [history, restore, snapshot]);
 
+  /**
+   * Lồng tiếng cho cả video.
+   *
+   * Không đưa vào `run()` vì thao tác này đổi **thời lượng các cảnh**, tức đổi cả timeline;
+   * gộp chung vào ngăn xếp hoàn tác sẽ khiến một lần Ctrl+Z vừa gỡ tiếng vừa đổi độ dài mà
+   * người dùng không đoán được.
+   */
+  const handleSynthesize = useCallback(
+    async (force: boolean) => {
+      setSynthesizing(true);
+      setSaveState("saving");
+      setError(null);
+      playback.pause();
+
+      try {
+        const result = await synthesizeVoice(projectId, force);
+        setProject(result.project);
+        setVoiceClips(result.clips);
+        setQuota(result.quota);
+        setSaveState("saved");
+      } catch (cause) {
+        setSaveState("error");
+        setError(cause instanceof Error ? cause.message : "Không lồng tiếng được");
+      } finally {
+        setSynthesizing(false);
+      }
+    },
+    [playback, projectId, setError],
+  );
+
+  const { state: exportState, start: startExport } = useExport({
+    onError: setError,
+    // Số credit hiện ở header; không làm mới thì người dùng vừa bị trừ tiền mà màn hình
+    // vẫn báo số cũ, và họ sẽ nghĩ hệ thống đếm sai.
+    onBalanceChange: () => void refreshUser(),
+  });
+
   const handleExport = useCallback(() => {
-    const path = pickRenderPath();
+    const current = projectRef.current;
+    if (!current || exportState.running) return;
 
-    if (path.kind === "unsupported") {
-      setError(path.reason);
-      return;
-    }
+    // Tên file lấy từ tên dự án; ký tự không hợp lệ trên Windows sẽ làm hỏng lượt tải.
+    const safeName =
+      current.title.replace(/[\\/:*?"<>|]+/g, "-").trim().slice(0, 60) || "reelforge";
 
-    setError(
-      "Máy này đủ điều kiện xuất video. Bộ xuất MP4 (WebCodecs) là bước tiếp theo của hệ thống, hiện chưa bật.",
-    );
-  }, []);
+    void startExport(projectId, safeName);
+  }, [exportState.running, projectId, startExport]);
+
+  /**
+   * Đóng tab giữa lúc đang encode là mất cả video lẫn credit đã giữ chỗ.
+   *
+   * Trình duyệt không cho tuỳ biến nội dung hộp thoại này, nhưng nó vẫn buộc người dùng
+   * dừng lại một nhịp — đủ để họ nhận ra mình đang bỏ dở việc gì.
+   */
+  useEffect(() => {
+    if (!exportState.running) return;
+
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [exportState.running]);
 
   const lines = project?.lines ?? [];
 
@@ -315,7 +447,7 @@ export default function StudioEditorPage() {
   if (!project) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-3 px-4">
-        <p className="text-sm text-muted">{error ?? "Không tìm thấy dự án"}</p>
+        <p className="text-sm text-muted">{loadError ?? "Không tìm thấy dự án"}</p>
         <Link
           href="/studio"
           className="rounded-btn border border-line bg-subtle px-4 py-2 text-sm font-semibold text-ink"
@@ -398,40 +530,51 @@ export default function StudioEditorPage() {
         </Link>
       </main>
 
-      <main className="hidden h-screen w-full flex-col overflow-hidden bg-canvas lg:flex">
+      {/*
+        Tour chỉ bật khi phòng dựng đã dựng thật: dưới 1024px giao diện này không render nên
+        mọi neo đều không tồn tại, và tour sẽ bỏ qua từng bước cho tới hết một cách vô ích.
+      */}
+      <TourProvider
+        tourKey="studio"
+        enabled={Boolean(project)}
+        preparers={{ openTab: (value) => setTab((value ?? "content") as PanelTab) }}
+      >
+        <main className="hidden h-screen w-full flex-col overflow-hidden bg-canvas lg:flex">
+        {/* Phát tiếng khớp playhead; component này không vẽ gì, xem ghi chú ở `VoiceTrack`. */}
+        <VoiceTrack
+          clips={voiceClips}
+          sceneStartMs={sceneStartMs}
+          playback={playback}
+          muted={voiceMuted}
+        />
+
         <TopBar
           title={project.title}
           aspectRatio={project.aspectRatio}
+          resolution={project.resolution}
+          credits={user.credits}
           saveState={saveState}
           canUndo={history.canUndo}
           canRedo={history.canRedo}
-          onTitleChange={(title) => setProject({ ...project, title })}
+          playback={playback}
           onTitleCommit={(title) =>
             void run(() => updateProject(projectId, { title }), false)
           }
           onAspectChange={(aspectRatio: AspectRatio) =>
             void run(() => updateProject(projectId, { aspectRatio }), false)
           }
+          onResolutionChange={(resolution) =>
+            void run(() => updateProject(projectId, { resolution }), false)
+          }
           onUndo={handleUndo}
           onRedo={handleRedo}
           onExport={handleExport}
+          onRunVoice={() => void handleSynthesize(false)}
+          onOpenSubtitle={() => setTab("subtitle")}
+          exporting={exportState.running}
+          exportPercent={exportState.percent}
+          exportStage={exportState.stage}
         />
-
-        {error ? (
-          <p
-            role="alert"
-            className="shrink-0 border-b border-line bg-subtle px-4 py-2 text-xs text-ink"
-          >
-            {error}
-            <button
-              type="button"
-              onClick={() => setError(null)}
-              className="ml-2 font-semibold text-muted underline"
-            >
-              Đóng
-            </button>
-          </p>
-        ) : null}
 
         <div className="flex min-h-0 flex-1">
           <ScenePanel
@@ -461,6 +604,7 @@ export default function StudioEditorPage() {
               <Stage
                 config={config}
                 images={images}
+                seekMedia={seekMedia}
                 playback={playback}
                 showSafeZone={showSafeZone}
                 showCaption={showCaption}
@@ -536,6 +680,10 @@ export default function StudioEditorPage() {
             onSpeedCommit={(voiceSpeed) =>
               void run(() => updateProject(projectId, { voiceSpeed }))
             }
+            quota={quota}
+            voicedLines={project.lines.filter((item) => item.voiceClipId).length}
+            synthesizing={synthesizing}
+            onSynthesize={(force) => void handleSynthesize(force)}
           />
         </div>
 
@@ -548,15 +696,19 @@ export default function StudioEditorPage() {
           musicVolume={musicVolume}
           showImage={showImage}
           showCaption={showCaption}
+          voiceClips={voiceClips}
+          voiceMuted={voiceMuted}
+          onToggleVoiceMuted={() => setVoiceMuted((value) => !value)}
           onSelect={setActiveIndex}
           onDurationChange={(index, durationMs) =>
             void run(() => updateLine(projectId, index, { durationMs }))
           }
           onMusicVolumeChange={setMusicVolume}
-          onToggleImage={() => setShowImage((value) => !value)}
-          onToggleCaption={() => setShowCaption((value) => !value)}
-        />
-      </main>
+            onToggleImage={() => setShowImage((value) => !value)}
+            onToggleCaption={() => setShowCaption((value) => !value)}
+          />
+        </main>
+      </TourProvider>
     </>
   );
 }

@@ -41,7 +41,7 @@ import {
   verifyAiModel,
   type ModelUsage,
 } from "@/lib/admin/ai-models-api";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 const BADGE_ACCENT = {
   "Default Primary": "brand",

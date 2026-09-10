@@ -12,6 +12,14 @@ import { Project } from '../projects/project.entity.js';
 
 export type MediaOrigin = 'crawled' | 'uploaded';
 
+/**
+ * Loại media của một tài nguyên.
+ *
+ * `image` và `gif` để **người dùng tự đặt thời lượng cảnh**; `video` thì thời lượng bám
+ * theo chính file, vì cắt tuỳ tiện sẽ làm hình đứt giữa chừng.
+ */
+export type MediaKind = 'image' | 'video' | 'gif';
+
 /** Một bản resize của ảnh gốc, khoá theo chiều rộng đích. */
 export interface MediaVariant {
   width: number;
@@ -30,6 +38,7 @@ export interface MediaVariant {
  */
 @Entity('media_assets')
 @Check('chk_media_assets_origin', `"origin" IN ('crawled', 'uploaded')`)
+@Check('chk_media_assets_kind', `"kind" IN ('image', 'video', 'gif')`)
 export class MediaAsset {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -44,6 +53,13 @@ export class MediaAsset {
 
   @Column({ type: 'varchar', length: 20 })
   origin!: MediaOrigin;
+
+  @Column({ type: 'varchar', length: 10, default: 'image' })
+  kind!: MediaKind;
+
+  /** Chỉ video mới có; ảnh và GIF do người dùng quyết định thời lượng hiển thị. */
+  @Column({ name: 'duration_ms', type: 'integer', nullable: true })
+  durationMs!: number | null;
 
   /** Khoá của bản gốc đã được `sharp` xử lý lại (loại payload nhúng trong file ảnh). */
   @Column({ name: 'source_key', type: 'varchar', length: 300 })

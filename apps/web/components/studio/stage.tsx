@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { drawFrame, type ImageMap } from "@repo/render-core";
 import type { RenderConfig } from "@repo/shared";
 import { formatTimecode } from "@/lib/studio/timecode";
-import type { Playback } from "@/lib/studio/use-playback";
+import { usePlayhead, type Playback } from "@/lib/studio/use-playback";
 
 /**
  * Phân vùng 2 — khung xem trước.
@@ -27,6 +27,7 @@ import type { Playback } from "@/lib/studio/use-playback";
 export function Stage({
   config,
   images,
+  seekMedia,
   playback,
   showSafeZone,
   showCaption,
@@ -37,6 +38,8 @@ export function Stage({
 }: {
   config: RenderConfig;
   images: ImageMap;
+  /** Tua mọi video về đúng mốc trước khi vẽ; ảnh và GIF không cần. */
+  seekMedia: (timeMs: number) => void;
   playback: Playback;
   showSafeZone: boolean;
   /** Hai công tắc này do thước thời gian điều khiển, giống mọi phần mềm dựng phim. */
@@ -49,7 +52,9 @@ export function Stage({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dragging, setDragging] = useState(false);
-  const { timeMs, playing, toggle, seek } = playback;
+  const { playing, toggle, seek } = playback;
+  // Canvas phải vẽ lại mỗi khung hình nên đây là một trong số ít chỗ được đăng ký playhead.
+  const timeMs = usePlayhead(playback);
   const total = config.meta.totalDurationMs;
 
   // Vẽ lại mỗi khi mốc thời gian, config hay ảnh đổi — kể cả lúc đang tạm dừng.
@@ -58,6 +63,9 @@ export function Stage({
     if (!ctx) return;
 
     let cancelled = false;
+
+    // Video phải ở đúng khung hình trước khi canvas đọc nó.
+    seekMedia(timeMs);
 
     // Chờ font trước khi vẽ khung đầu tiên, nếu không phụ đề tiếng Việt sẽ mất dấu.
     void document.fonts.ready.then(() => {
@@ -73,11 +81,11 @@ export function Stage({
     return () => {
       cancelled = true;
     };
-  }, [config, images, timeMs, showSafeZone, showCaption, showImage]);
+  }, [config, images, seekMedia, timeMs, showSafeZone, showCaption, showImage]);
 
   return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-4">
-      <div className="relative min-h-0 flex-1">
+      <div data-tour="studio.stage" className="relative min-h-0 flex-1">
         <canvas
           ref={canvasRef}
           width={config.output.width}
@@ -99,7 +107,7 @@ export function Stage({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div data-tour="studio.transport" className="flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={toggle}

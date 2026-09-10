@@ -20,7 +20,7 @@ import {
   Pill,
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 type StrategyId = (typeof ROUTING_STRATEGIES)[number]["id"];
 

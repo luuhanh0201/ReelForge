@@ -22,6 +22,9 @@ import { LandingSettingsModule } from './landing-settings/landing-settings.modul
 import { MailModule } from './mail/mail.module.js';
 import { ProviderCredentialsModule } from './provider-credentials/provider-credentials.module.js';
 import { RedisModule } from './redis/redis.module.js';
+import { RendersModule } from './renders/renders.module.js';
+import { ToursModule } from './tours/tours.module.js';
+import { TtsModule } from './tts/tts.module.js';
 import { TtsUsageModule } from './tts-usage/tts-usage.module.js';
 import { VoicesModule } from './voices/voices.module.js';
 
@@ -42,6 +45,9 @@ import { VoicesModule } from './voices/voices.module.js';
     AuthModule,
     ProjectsModule,
     MediaModule,
+    TtsModule,
+    RendersModule,
+    ToursModule,
     HealthModule,
     AuditModule,
     TtsUsageModule,

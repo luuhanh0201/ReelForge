@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 
 /** Icon theo loại thiết bị — nhìn là biết phiên mở từ máy tính hay điện thoại. */
 const DEVICE_ICON = {

@@ -15,6 +15,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { PLAN_LABEL } from "@/config/plans.config";
+import { usePathname } from "next/navigation";
 import { NAV_LINKS, SITE } from "@/config/site.config";
 import { useApp } from "@/lib/app-provider";
 import { L } from "@/lib/i18n";
@@ -34,6 +35,15 @@ export function SiteHeader() {
     openAuth,
     signOut,
   } = useApp();
+
+  /**
+   * Nav là các mỏ neo tới section của trang chủ. Ở route khác (studio, 404, xác minh
+   * email) thì `#tinh-nang` không trỏ tới đâu cả, nên phải đổi thành `/#tinh-nang` để quay
+   * về trang chủ đúng mục.
+   */
+  const pathname = usePathname();
+  const anchor = (href: string) =>
+    pathname === "/" || !href.startsWith("#") ? href : `/${href}`;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -63,7 +73,7 @@ export function SiteHeader() {
           {NAV_LINKS.map((link) => (
             <a
               key={link.href}
-              href={link.href}
+              href={anchor(link.href)}
               className="whitespace-nowrap rounded-btn px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-subtle hover:text-ink"
             >
               {t(link.label)}
@@ -206,7 +216,7 @@ export function SiteHeader() {
               {NAV_LINKS.map((link) => (
                 <a
                   key={link.href}
-                  href={link.href}
+                  href={anchor(link.href)}
                   onClick={() => setMobileOpen(false)}
                   className="rounded-btn px-3 py-2.5 text-sm font-medium text-muted transition-colors hover:bg-subtle hover:text-ink"
                 >

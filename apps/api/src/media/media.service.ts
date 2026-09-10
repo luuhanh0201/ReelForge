@@ -7,11 +7,16 @@ import { BusinessException } from '../common/exceptions/business.exception.js';
 import { OUTPUT_PRESETS } from '@repo/shared';
 import type { AspectRatio, Project, Resolution } from '../projects/project.entity.js';
 import { StorageService } from '../storage/storage.service.js';
-import { MediaAsset, type MediaVariant } from './media-asset.entity.js';
+import { MediaAsset, type MediaKind, type MediaVariant } from './media-asset.entity.js';
+import { probeGif, probeMp4 } from './probe.js';
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+/** Video nặng hơn ảnh nhiều lần, nhưng vẫn phải tải hết về trình duyệt để dựng. */
+export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 export const MIN_IMAGE_SIDE = 400;
 export const MAX_ASSETS_PER_PROJECT = 30;
+/** Video dài hơn mức này thì một dự án 60 giây không dùng tới, mà encode lại rất lâu. */
+export const MAX_VIDEO_MS = 120_000;
 
 /**
  * Nhận diện định dạng bằng **magic bytes**, không tin phần mở rộng hay `mimetype` do
@@ -37,6 +42,25 @@ const detectImageType = (buffer: Buffer): 'jpeg' | 'png' | 'webp' | null => {
   ) {
     return 'webp';
   }
+
+  return null;
+};
+
+/**
+ * Nhận diện loại tài nguyên, vẫn bằng **magic bytes**.
+ *
+ * MP4 không có chữ ký ở byte đầu: nó bắt đầu bằng một box `ftyp` mà 4 byte đầu là kích
+ * thước. Vì vậy phải đọc tên box ở offset 4 chứ không phải offset 0.
+ */
+const detectKind = (buffer: Buffer): MediaKind | null => {
+  if (detectImageType(buffer)) return 'image';
+
+  if (buffer.length >= 10) {
+    const signature = buffer.toString('ascii', 0, 6);
+    if (signature === 'GIF87a' || signature === 'GIF89a') return 'gif';
+  }
+
+  if (buffer.length >= 12 && buffer.toString('ascii', 4, 8) === 'ftyp') return 'video';
 
   return null;
 };
@@ -74,19 +98,25 @@ export class MediaService {
     const count = await this.assets.count({ where: { projectId: project.id } });
     if (count >= MAX_ASSETS_PER_PROJECT) {
       throw new BusinessException('VALIDATION_FAILED', {
-        message: `Mỗi dự án tối đa ${MAX_ASSETS_PER_PROJECT} ảnh`,
+        message: `Mỗi dự án tối đa ${MAX_ASSETS_PER_PROJECT} tài nguyên`,
       });
+    }
+
+    const kind = detectKind(file.buffer);
+
+    if (!kind) {
+      throw new BusinessException('UNSUPPORTED_MEDIA_TYPE', {
+        message: 'Chỉ nhận ảnh JPG, PNG, WebP, ảnh động GIF hoặc video MP4',
+      });
+    }
+
+    if (kind !== 'image') {
+      return this.uploadPlayable(project, file, kind, count, origin, sourceUrl);
     }
 
     if (file.buffer.length > MAX_IMAGE_BYTES) {
       throw new BusinessException('PAYLOAD_TOO_LARGE', {
         message: 'Ảnh vượt quá 20MB',
-      });
-    }
-
-    if (!detectImageType(file.buffer)) {
-      throw new BusinessException('UNSUPPORTED_MEDIA_TYPE', {
-        message: 'Chỉ nhận ảnh JPG, PNG hoặc WebP',
       });
     }
 
@@ -127,6 +157,8 @@ export class MediaService {
     asset.origin = origin;
     asset.sourceKey = sourceKey;
     asset.mimeType = 'image/jpeg';
+    asset.kind = 'image';
+    asset.durationMs = null;
     asset.width = width;
     asset.height = height;
     asset.byteSize = normalized.length;
@@ -140,6 +172,91 @@ export class MediaService {
     await this.ensureVariant(saved, project.aspectRatio, project.resolution);
 
     return saved;
+  }
+
+  /**
+   * Nhận video hoặc GIF.
+   *
+   * Khác hẳn nhánh ảnh ở hai điểm, và cả hai đều là chủ ý:
+   *
+   * - **Không đi qua `sharp`, không resize.** Đổi kích thước video cần ffmpeg, mà cả hệ
+   *   thống đang cố ý không có nó — việc dựng hình nằm ở máy khách. Trình duyệt tự co giãn
+   *   khung hình khi vẽ lên canvas.
+   * - **Lưu nguyên byte gốc.** Với ảnh, việc ghi lại qua `sharp` loại được payload nhúng;
+   *   với video ta không có bước tương đương, nên bù lại bằng cách kiểm tra header thật sự
+   *   đọc được và chặn kích thước lẫn thời lượng.
+   */
+  private async uploadPlayable(
+    project: Project,
+    file: { buffer: Buffer; originalname?: string },
+    kind: 'video' | 'gif',
+    count: number,
+    origin: MediaAsset['origin'],
+    sourceUrl: string | null,
+  ): Promise<MediaAsset> {
+    const limit = kind === 'video' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+
+    if (file.buffer.length > limit) {
+      throw new BusinessException('PAYLOAD_TOO_LARGE', {
+        message:
+          kind === 'video'
+            ? `Video vượt quá ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)}MB`
+            : 'Ảnh động vượt quá 20MB',
+      });
+    }
+
+    // Tách hai nhánh thay vì gộp thành một union: chỉ video mới có thời lượng, và gộp lại
+    // thì mỗi lần đọc `durationMs` đều phải kiểm tra kiểu ở chỗ gọi.
+    const video = kind === 'video' ? probeMp4(file.buffer) : null;
+    const gif = kind === 'gif' ? probeGif(file.buffer) : null;
+    const info: { width: number; height: number } | null = video ?? gif;
+    const durationMs: number | null = video?.durationMs ?? null;
+
+    if (!info) {
+      throw new BusinessException('UNSUPPORTED_MEDIA_TYPE', {
+        message:
+          kind === 'video'
+            ? 'Không đọc được thông tin video. Hãy dùng file MP4 chuẩn.'
+            : 'File GIF không đọc được',
+      });
+    }
+
+    if (info.width < MIN_IMAGE_SIDE || info.height < MIN_IMAGE_SIDE) {
+      throw new BusinessException('VALIDATION_FAILED', {
+        message: `Khung hình cần tối thiểu ${MIN_IMAGE_SIDE}×${MIN_IMAGE_SIDE} điểm ảnh`,
+      });
+    }
+
+    if (durationMs !== null && (durationMs <= 0 || durationMs > MAX_VIDEO_MS)) {
+      throw new BusinessException('VALIDATION_FAILED', {
+        message: `Video phải dài từ 1 đến ${MAX_VIDEO_MS / 1000} giây`,
+      });
+    }
+
+    const assetId = randomUUID();
+    const extension = kind === 'video' ? 'mp4' : 'gif';
+    const mimeType = kind === 'video' ? 'video/mp4' : 'image/gif';
+    const sourceKey = `projects/${project.id}/assets/${assetId}/source.${extension}`;
+
+    await this.storage.put(sourceKey, file.buffer, mimeType);
+
+    const asset = new MediaAsset();
+    asset.id = assetId;
+    asset.projectId = project.id;
+    asset.origin = origin;
+    asset.kind = kind;
+    asset.sourceKey = sourceKey;
+    asset.mimeType = mimeType;
+    asset.width = info.width;
+    asset.height = info.height;
+    asset.durationMs = durationMs;
+    asset.byteSize = file.buffer.length;
+    asset.sourceUrl = sourceUrl;
+    asset.sortOrder = count;
+    // Không có bản resize: `signedVariantUrl` sẽ trả thẳng file gốc cho loại này.
+    asset.variants = [];
+
+    return this.assets.save(asset);
   }
 
   /**
@@ -189,6 +306,10 @@ export class MediaService {
     aspectRatio: AspectRatio,
     resolution: Resolution,
   ): Promise<string> {
+    // Video và GIF không có bản resize — đổi kích thước chúng cần ffmpeg, mà cả hệ thống
+    // cố ý không dùng. Trình duyệt tự co giãn khi vẽ lên canvas.
+    if (asset.kind !== 'image') return this.storage.signedUrl(asset.sourceKey);
+
     const variant = await this.ensureVariant(asset, aspectRatio, resolution);
     return this.storage.signedUrl(variant.key);
   }

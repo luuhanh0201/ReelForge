@@ -12,6 +12,15 @@ import {
   type ReactNode,
 } from "react";
 
+/**
+ * Thông báo nổi góc dưới phải.
+ *
+ * Dùng chung cho **cả admin lẫn phòng dựng**: hai khu vực nhìn rất khác nhau nhưng cùng
+ * cần một chỗ duy nhất để báo "xong rồi" hay "hỏng rồi" mà không đẩy nội dung xuống.
+ *
+ * Không dùng dải cảnh báo chèn vào bố cục: ở phòng dựng, một dải xuất hiện giữa thanh đỉnh
+ * và khung hình sẽ **đẩy cả canvas trượt xuống** đúng lúc người dùng đang canh chỉnh.
+ */
 type ToastTone = "success" | "warning" | "danger" | "info";
 
 interface ToastItem {
@@ -27,6 +36,9 @@ const TONE = {
   info: { icon: Info, className: "border-info/40 text-info" },
 } as const;
 
+/** Thời gian một thông báo nằm trên màn hình. */
+const TOAST_MS = 2000;
+
 const ToastContext = createContext<((message: string, tone?: ToastTone) => void) | null>(
   null,
 );
@@ -40,7 +52,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((current) => [...current, { id, message, tone }].slice(-4));
     window.setTimeout(
       () => setToasts((current) => current.filter((toast) => toast.id !== id)),
-      3200,
+      TOAST_MS,
     );
   }, []);
 

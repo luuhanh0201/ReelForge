@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { AdminCard, AdminPageHeader } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
 import { AdminButton } from "@/components/admin/primitives";
-import { useToast } from "@/components/admin/toast";
+import { useToast } from "@/components/ui/toast";
 import { CmsHeader } from "./cms-header";
 import { ContentSection } from "./content-section";
 import { LiveSimulator } from "./live-simulator";

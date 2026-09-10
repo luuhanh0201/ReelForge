@@ -54,6 +54,8 @@ export interface StudioVoiceView {
   /** Giọng không trả timepoint thì phụ đề phải chia theo độ dài ký tự. */
   supportsTimepoints: boolean;
   sampleText: string;
+  /** Có bản nghe thử sẵn trong kho hay chưa — quyết định giao diện hiện nút nghe. */
+  hasPreview: boolean;
 }
 
 export interface VoiceInput {
@@ -242,6 +244,14 @@ export class VoicesService {
       order: { region: 'ASC', personaName: 'ASC' },
     });
 
+    // Chỉ lấy khoá, không lấy cột `audio`: 40 giọng × vài chục KB là hàng MB đọc ra chỉ để
+    // trả lời một câu hỏi đúng/sai.
+    const withPreview = await this.previews
+      .createQueryBuilder('preview')
+      .select('preview.voice_id', 'voiceId')
+      .getRawMany<{ voiceId: string }>();
+    const previewIds = new Set(withPreview.map((row) => row.voiceId));
+
     return voices.map((voice) => ({
       id: voice.id,
       personaName: voice.personaName,
@@ -249,7 +259,32 @@ export class VoicesService {
       region: voice.region,
       supportsTimepoints: voice.supportsTimepoints,
       sampleText: voice.sampleText,
+      hasPreview: previewIds.has(voice.id),
     }));
+  }
+
+  /**
+   * Bản nghe thử **đã có sẵn** của một giọng.
+   *
+   * Khác `preview()` ở một điểm quyết định: hàm này **không bao giờ gọi Google**. Người
+   * dùng cuối lướt qua hàng chục giọng để chọn, mỗi lần bấm mà sinh audio mới thì hoá đơn
+   * TTS sẽ phình theo số lần thử chứ không theo số video làm ra. Chưa có bản nào thì trả
+   * `null` để giao diện ẩn nút, và việc tạo bản nghe thử là thao tác của quản trị viên.
+   */
+  async cachedPreview(
+    id: string,
+  ): Promise<{ audioBase64: string; mimeType: string; sampleText: string } | null> {
+    const voice = await this.repository.findOne({ where: { id, enabled: true } });
+    if (!voice) return null;
+
+    const cached = await this.previews.findOne({ where: { voiceId: id } });
+    if (!cached) return null;
+
+    return {
+      audioBase64: cached.audio.toString('base64'),
+      mimeType: cached.mimeType,
+      sampleText: voice.sampleText,
+    };
   }
 
   /** Giọng mới luôn tắt sẵn để buộc nghe thử trước khi mở cho người dùng. */

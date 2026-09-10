@@ -1,4 +1,5 @@
 import {
+  Compass,
   Cpu,
   Image,
   LayoutTemplate,
@@ -119,6 +120,12 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         label: "Nội dung, Hero & Tiêu đề",
         href: "/admin/landing-content",
         icon: PenLine,
+      },
+      {
+        id: "tours",
+        label: "Tour hướng dẫn",
+        href: "/admin/tours",
+        icon: Compass,
       },
       {
         id: "landing-showcase",
