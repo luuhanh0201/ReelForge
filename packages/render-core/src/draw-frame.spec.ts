@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   distributeWordTimings,
-  rippleTimeline,
   RenderConfigSchema,
   type RenderConfig,
 } from "@repo/shared";
@@ -101,51 +100,5 @@ describe("distributeWordTimings", () => {
 
   it("dòng rỗng không sinh từ nào", () => {
     expect(distributeWordTimings("   ", 1000)).toEqual([]);
-  });
-});
-
-describe("rippleTimeline", () => {
-  it("kéo dài một cảnh thì các cảnh sau dịch theo", () => {
-    const next = rippleTimeline(buildConfig(), 0, 4000);
-
-    expect(next.scenes[0]!.durationMs).toBe(4000);
-    expect(next.scenes[1]!.startMs).toBe(4000);
-    expect(next.scenes[2]!.startMs).toBe(7000);
-    expect(next.meta.totalDurationMs).toBe(10_000);
-  });
-
-  it("rút ngắn cảnh giữa thì chỉ cảnh sau nó dịch, cảnh trước giữ nguyên", () => {
-    const next = rippleTimeline(buildConfig(), 1, 1000);
-
-    expect(next.scenes[0]!.startMs).toBe(0);
-    expect(next.scenes[1]!.durationMs).toBe(1000);
-    expect(next.scenes[2]!.startMs).toBe(4000);
-    expect(next.meta.totalDurationMs).toBe(7000);
-  });
-
-  it("tiếng nói dịch cùng cảnh của nó", () => {
-    const next = rippleTimeline(buildConfig(), 0, 4000);
-
-    expect(next.audio.voiceClips[0]!.durationMs).toBe(4000);
-    expect(next.audio.voiceClips[1]!.startMs).toBe(4000);
-    expect(next.audio.voiceClips[2]!.startMs).toBe(7000);
-  });
-
-  it("nhạc nền tắt dần trước khi video kết thúc", () => {
-    const next = rippleTimeline(buildConfig(), 0, 4000);
-
-    expect(next.audio.music!.fadeOutMs).toBe(next.meta.totalDurationMs - 800);
-  });
-
-  it("không đổi thời lượng thì trả về nguyên config", () => {
-    const config = buildConfig();
-    expect(rippleTimeline(config, 0, 3000)).toBe(config);
-  });
-
-  /** Kết quả phải luôn là config hợp lệ, nếu không lỗi sẽ chỉ lộ ra lúc encode. */
-  it("kết quả vẫn qua được schema", () => {
-    expect(() =>
-      RenderConfigSchema.parse(rippleTimeline(buildConfig(), 1, 5000)),
-    ).not.toThrow();
   });
 });

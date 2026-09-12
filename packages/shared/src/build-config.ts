@@ -7,6 +7,7 @@ import {
   type Resolution,
   type SubtitleStyle,
 } from "./render-config.js";
+import { ACCENT_POOL, createVariation, sceneVariation } from "./variation.js";
 
 /**
  * Bố cục theo khổ video.
@@ -42,6 +43,14 @@ export interface BuildConfigInput {
   }[];
   /** Tiếng đã tổng hợp, khoá theo chỉ số cảnh. */
   voiceClips?: { sceneIndex: number; url: string; durationMs: number }[];
+  /**
+   * Hạt giống của lần xuất này.
+   *
+   * Bỏ trống thì lấy `projectId` — khung xem trước dùng đường đó nên nhìn ổn định giữa các
+   * lần mở. Lúc **xuất thật** thì máy chủ phải truyền một hạt giống mới, vì nền tảng phân
+   * phối phạt nội dung trùng lặp và người dùng đăng hàng chục video mỗi ngày.
+   */
+  variationSeed?: string;
 }
 
 /**
@@ -61,6 +70,9 @@ export const buildRenderConfig = (input: BuildConfigInput): RenderConfig | null 
   const preset = OUTPUT_PRESETS[input.aspectRatio][input.resolution];
   const layout = LAYOUTS[input.aspectRatio];
 
+  const seed = input.variationSeed || input.projectId;
+  const variation = createVariation(seed);
+
   const starts: number[] = [];
   const scenes = input.lines.map((line, position) => {
     const previousStart = starts[position - 1] ?? 0;
@@ -76,18 +88,8 @@ export const buildRenderConfig = (input: BuildConfigInput): RenderConfig | null 
       durationMs,
       assetUrl: line.assetUrl,
       assetKind: line.assetKind ?? "image",
-      // Ken Burns luân phiên hướng để hai cảnh liền nhau không giống hệt nhau.
-      kenBurns:
-        position % 2 === 0
-          ? {
-              from: [0.5, 0.5, 1] as [number, number, number],
-              to: [0.5, 0.45, 1.12] as [number, number, number],
-            }
-          : {
-              from: [0.5, 0.45, 1.12] as [number, number, number],
-              to: [0.5, 0.5, 1] as [number, number, number],
-            },
-      transition: "fade" as const,
+      // Hướng, mức zoom và kiểu chuyển cảnh đều suy từ hạt giống — xem `variation.ts`.
+      ...sceneVariation(variation, position),
       caption: {
         text: line.text,
         emphasis: line.emphasis,
@@ -111,7 +113,19 @@ export const buildRenderConfig = (input: BuildConfigInput): RenderConfig | null 
     template: {
       code: "bold_sale",
       primaryColor: "#ff6b35",
-      subtitle: input.subtitle ?? {},
+      subtitle: {
+        ...input.subtitle,
+        /*
+         * Màu chữ đang đọc lấy theo hạt giống, trừ khi người dùng đã tự chọn.
+         *
+         * Đây là cách rẻ nhất để đổi tín hiệu nhận dạng mà người xem không thấy lạ — cả
+         * năm màu đều hợp lý cho video bán hàng.
+         */
+        activeColor:
+          input.subtitle?.activeColor ??
+          variation.pick("accent", ACCENT_POOL) ??
+          "#FF6B35",
+      },
       layout: {
         ...layout,
         // Vị trí người dùng tự kéo thắng bố cục mặc định của khổ.
@@ -139,7 +153,7 @@ export const buildRenderConfig = (input: BuildConfigInput): RenderConfig | null 
     },
     meta: {
       projectId: input.projectId,
-      variationSeed: input.projectId,
+      variationSeed: seed,
       totalDurationMs,
     },
   };

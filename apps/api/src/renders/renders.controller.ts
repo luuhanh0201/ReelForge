@@ -7,6 +7,7 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
 import type { RenderConfig } from '@repo/shared';
 import type { AuthenticatedUser } from '../auth/authenticated-user.type.js';
@@ -60,7 +61,14 @@ export class RendersController {
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: Request,
   ): Promise<{ renderId: string; config: RenderConfig; balance: number }> {
-    const config = await this.configs.build(projectId, user.id);
+    /*
+     * Hạt giống mới cho **mỗi lần bấm xuất**, kể cả cùng một dự án.
+     *
+     * Người dùng đăng 5–15 video mỗi ngày; hai lần xuất cùng một dự án ra hai file giống
+     * hệt nhau là tự bóp lượt hiển thị của chính họ. Hạt giống được lưu trong
+     * `render_config`, nên khi khách báo lỗi vẫn dựng lại được đúng file đó.
+     */
+    const config = await this.configs.build(projectId, user.id, randomUUID());
 
     const { renderId, balance } = await this.renders.start(
       user.id,

@@ -97,6 +97,17 @@ function StudioEditor() {
   const [quota, setQuota] = useState<TtsQuota | null>(null);
   const [synthesizing, setSynthesizing] = useState(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
+
+  /**
+   * Thời lượng của cảnh đang được kéo trên thước.
+   *
+   * Giữ ở đây thay vì chỉ trong `Timeline` để **khung xem trước đổi theo tay người dùng**:
+   * mọi mốc thời gian phía sau đều suy ra từ danh sách thời lượng, nên chỉ cần ghi đè một
+   * phần tử là cả timeline dịch theo đúng.
+   */
+  const [dragDuration, setDragDuration] = useState<
+    { index: number; durationMs: number } | null
+  >(null);
   const [images, setImages] = useState<ImageMap>(new Map());
   // Hàm tua video; thay mỗi khi nạp lại media, nên giữ trong state chứ không phải ref.
   const [seekMedia, setSeekMedia] = useState<(timeMs: number) => void>(() => () => undefined);
@@ -187,8 +198,11 @@ function StudioEditor() {
   }, [projectId, user]);
 
   const sceneDurations = useMemo(
-    () => project?.lines.map((line) => line.durationMs) ?? [],
-    [project],
+    () =>
+      project?.lines.map((line, position) =>
+        dragDuration?.index === position ? dragDuration.durationMs : line.durationMs,
+      ) ?? [],
+    [project, dragDuration],
   );
 
   const totalMs = useMemo(
@@ -700,6 +714,7 @@ function StudioEditor() {
           voiceMuted={voiceMuted}
           onToggleVoiceMuted={() => setVoiceMuted((value) => !value)}
           onSelect={setActiveIndex}
+          onDurationPreview={setDragDuration}
           onDurationChange={(index, durationMs) =>
             void run(() => updateLine(projectId, index, { durationMs }))
           }

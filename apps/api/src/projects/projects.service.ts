@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { speechChanged } from '@repo/shared';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import { MediaAsset } from '../media/media-asset.entity.js';
 import {
@@ -270,12 +271,17 @@ export class ProjectsService {
           message: 'Lời thoại cần từ 1 đến 500 ký tự',
         });
       }
-      if (text !== line.text) {
-        line.text = text;
-        // Tiếng đã tổng hợp là của câu cũ. Giữ lại thì phụ đề sẽ chạy trên một giọng đọc
-        // nội dung khác — hỏng theo cách người dùng chỉ phát hiện khi đã xuất video.
-        line.voiceClipId = null;
-      }
+      /*
+       * Chỉ gỡ đoạn tiếng khi **lời đọc** thật sự đổi.
+       *
+       * Viết hoa lại một chữ, thêm dấu chấm than, chèn emoji hay ngắt dòng lại đều không
+       * đổi cách đọc. Coi tất cả là "đã đổi" nghĩa là mỗi lần sửa chính tả đều bắt người
+       * dùng lồng tiếng lại: mất một lượt hạn mức và vài giây chờ, đổi lấy một file audio
+       * y hệt file vừa xoá.
+       */
+      if (speechChanged(line.text, text)) line.voiceClipId = null;
+
+      line.text = text;
     }
 
     if (patch.assetId !== undefined) {

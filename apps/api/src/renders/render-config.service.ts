@@ -24,7 +24,16 @@ export class RenderConfigService {
     private readonly tts: TtsService,
   ) {}
 
-  async build(projectId: string, userId: string): Promise<RenderConfig> {
+  /**
+   * @param variationSeed Bỏ trống khi chỉ xem trước; **lúc xuất thật phải truyền hạt giống
+   * mới**, nếu không mọi lần xuất sẽ ra file giống hệt nhau và nền tảng phân phối coi đó
+   * là nội dung trùng lặp.
+   */
+  async build(
+    projectId: string,
+    userId: string,
+    variationSeed?: string,
+  ): Promise<RenderConfig> {
     const project = await this.projects.detail(projectId, userId);
 
     if (project.lines.length === 0) {
@@ -112,6 +121,7 @@ export class RenderConfigService {
         };
       }),
       voiceClips,
+      variationSeed,
     });
 
     if (!config) {

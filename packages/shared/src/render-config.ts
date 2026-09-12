@@ -60,6 +60,15 @@ export const LayoutSchema = z.object({
 
 export type Layout = z.infer<typeof LayoutSchema>;
 
+/**
+ * Kiểu chuyển cảnh.
+ *
+ * Khai ở đây để **schema và bộ sinh biến thể dùng chung một danh sách**. Trước đó hai nơi
+ * tự khai riêng và lệch nhau, khiến config chỉ hỏng khi hạt giống rơi trúng một giá trị
+ * không có trong schema — một lỗi ngẫu nhiên rất khó truy.
+ */
+export const TRANSITIONS = ["cut", "fade", "slide_left", "zoom_in"] as const;
+
 /** Một từ trong phụ đề kèm mốc sáng lên — nền tảng của hiệu ứng karaoke. */
 export const WordTimingSchema = z.object({
   text: z.string(),
@@ -85,7 +94,7 @@ export const SceneSchema = z.object({
     from: z.tuple([z.number(), z.number(), z.number()]),
     to: z.tuple([z.number(), z.number(), z.number()]),
   }),
-  transition: z.enum(["cut", "fade", "slide_left", "zoom_in"]),
+  transition: z.enum(TRANSITIONS),
   caption: z.object({
     text: z.string(),
     /** Các cụm được nhấn màu khác — do LLM gợi ý hoặc người dùng đánh dấu. */
@@ -283,58 +292,3 @@ export const distributeWordTimings = (
   });
 };
 
-/**
- * Dịch mốc thời gian của các cảnh sau khi một cảnh đổi thời lượng.
- *
- * Chạy hoàn toàn trên máy khách, không có I/O, xong dưới 10ms kể cả video 60 cảnh — toàn
- * bộ độ trễ người dùng cảm nhận đến từ vòng gọi TTS chứ không phải phép tính này.
- */
-export const rippleTimeline = (
-  config: RenderConfig,
-  sceneIndex: number,
-  newDurationMs: number,
-): RenderConfig => {
-  const scene = config.scenes[sceneIndex];
-  if (!scene) return config;
-
-  const delta = newDurationMs - scene.durationMs;
-  if (delta === 0) return config;
-
-  const scenes = config.scenes.map((item) => {
-    if (item.index === sceneIndex) {
-      return { ...item, durationMs: newDurationMs };
-    }
-    if (item.index > sceneIndex) {
-      return { ...item, startMs: item.startMs + delta };
-    }
-    return item;
-  });
-
-  const voiceClips = config.audio.voiceClips.map((clip) => {
-    if (clip.sceneIndex === sceneIndex) {
-      return { ...clip, durationMs: newDurationMs };
-    }
-    if (clip.sceneIndex > sceneIndex) {
-      return { ...clip, startMs: clip.startMs + delta };
-    }
-    return clip;
-  });
-
-  const totalDurationMs = config.meta.totalDurationMs + delta;
-
-  return {
-    ...config,
-    scenes,
-    audio: {
-      ...config.audio,
-      voiceClips,
-      music: config.audio.music
-        ? {
-            ...config.audio.music,
-            fadeOutMs: Math.max(0, totalDurationMs - 800),
-          }
-        : null,
-    },
-    meta: { ...config.meta, totalDurationMs },
-  };
-};

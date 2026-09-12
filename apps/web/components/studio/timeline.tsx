@@ -47,6 +47,7 @@ export function Timeline({
   voiceMuted,
   onToggleVoiceMuted,
   onSelect,
+  onDurationPreview,
   onDurationChange,
   onMusicVolumeChange,
   onToggleImage,
@@ -64,6 +65,8 @@ export function Timeline({
   voiceMuted: boolean;
   onToggleVoiceMuted: () => void;
   onSelect: (index: number) => void;
+  /** Trong lúc kéo, để khung xem trước đổi theo ngay; `null` khi thả tay. */
+  onDurationPreview: (value: { index: number; durationMs: number } | null) => void;
   onDurationChange: (index: number, durationMs: number) => void;
   onMusicVolumeChange: (value: number) => void;
   onToggleImage: () => void;
@@ -127,12 +130,15 @@ export function Timeline({
         ),
       );
       setDragging({ index, durationMs: latest });
+      // Khung xem trước phải đổi theo tay người dùng, không đợi máy chủ trả lời.
+      onDurationPreview({ index, durationMs: latest });
     };
 
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       setDragging(null);
+      onDurationPreview(null);
       if (latest !== current) onDurationChange(index, latest);
     };
 
