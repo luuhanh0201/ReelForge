@@ -4,7 +4,7 @@ import {
   RenderConfigSchema,
   type RenderConfig,
 } from "@repo/shared";
-import { sceneAt } from "./draw-frame.js";
+import { captionBounds, sceneAt } from "./draw-frame.js";
 
 /** Config tối thiểu nhưng hợp lệ, đủ để kiểm tra luật thời gian. */
 const buildConfig = (): RenderConfig =>
@@ -100,5 +100,98 @@ describe("distributeWordTimings", () => {
 
   it("dòng rỗng không sinh từ nào", () => {
     expect(distributeWordTimings("   ", 1000)).toEqual([]);
+  });
+});
+
+/**
+ * Ngữ cảnh canvas giả, chỉ đủ cho phép đo.
+ *
+ * `captionBounds` chỉ đụng tới `font` và `measureText`; dựng một canvas thật trong Node
+ * đòi thêm phụ thuộc native mà không làm bài kiểm tra chặt hơn chút nào. Mỗi ký tự coi như
+ * rộng 30px, đủ để một câu dài phải xuống nhiều dòng.
+ */
+const fakeContext = () => {
+  const ctx = {
+    font: "",
+    measureText: (text: string) => ({ width: text.length * 30 }),
+  };
+
+  return ctx as unknown as CanvasRenderingContext2D;
+};
+
+const withCaption = (text: string, subtitleY: number, fontScale: number): RenderConfig => {
+  const base = buildConfig();
+
+  return {
+    ...base,
+    template: {
+      ...base.template,
+      subtitle: { ...base.template.subtitle, fontScale },
+      layout: { ...base.template.layout, subtitleY },
+    },
+    scenes: base.scenes.map((scene) => ({
+      ...scene,
+      caption: {
+        ...scene.caption,
+        words: distributeWordTimings(text, scene.durationMs, scene.startMs),
+      },
+    })),
+  };
+};
+
+describe("captionBounds", () => {
+  it("cảnh chưa có chữ thì không có gì để đo", () => {
+    const config = buildConfig();
+    expect(captionBounds(fakeContext(), config, config.scenes[0]!)).toBeNull();
+  });
+
+  it("khối chữ nằm cân hai bên vị trí phụ đề", () => {
+    const config = withCaption("Bàn phím này gõ rất êm tay", 0.78, 0.045);
+    const bounds = captionBounds(fakeContext(), config, config.scenes[0]!)!;
+
+    expect((bounds.top + bounds.bottom) / 2).toBeCloseTo(0.78, 2);
+  });
+
+  it("câu dài hơn thì xuống nhiều dòng và khối chữ cao hơn", () => {
+    const ctx = fakeContext();
+    const ngan = withCaption("Rẻ lắm", 0.78, 0.045);
+    const dai = withCaption(
+      "Bàn phím cơ này gõ rất êm tay và dùng được cả ngày không mỏi",
+      0.78,
+      0.045,
+    );
+
+    const a = captionBounds(ctx, ngan, ngan.scenes[0]!)!;
+    const b = captionBounds(ctx, dai, dai.scenes[0]!)!;
+
+    expect(b.lineCount).toBeGreaterThan(a.lineCount);
+    expect(b.bottom - b.top).toBeGreaterThan(a.bottom - a.top);
+  });
+
+  /**
+   * Đây là điều kiện mà khung xem trước dùng để cảnh báo. Đo sai ở đây nghĩa là người dùng
+   * được báo an toàn rồi tải về một video bị nút nền tảng che mất chữ.
+   */
+  it("kéo phụ đề xuống đáy thì chữ lấn vào vùng bị che", () => {
+    const ctx = fakeContext();
+    const config = buildConfig();
+    const safeBottom = 1 - config.template.layout.safeBottom;
+
+    const giua = withCaption("Rẻ lắm", 0.5, 0.045);
+    const day = withCaption("Rẻ lắm", 0.95, 0.045);
+
+    expect(captionBounds(ctx, giua, giua.scenes[0]!)!.bottom).toBeLessThan(safeBottom);
+    expect(captionBounds(ctx, day, day.scenes[0]!)!.bottom).toBeGreaterThan(safeBottom);
+  });
+
+  it("phóng cỡ chữ lên cũng đẩy chữ ra ngoài vùng an toàn", () => {
+    const ctx = fakeContext();
+    const safeBottom = 1 - buildConfig().template.layout.safeBottom;
+
+    const nho = withCaption("Rẻ lắm", 0.74, 0.03);
+    const to = withCaption("Rẻ lắm", 0.74, 0.14);
+
+    expect(captionBounds(ctx, nho, nho.scenes[0]!)!.bottom).toBeLessThan(safeBottom);
+    expect(captionBounds(ctx, to, to.scenes[0]!)!.bottom).toBeGreaterThan(safeBottom);
   });
 });

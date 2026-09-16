@@ -1,3 +1,4 @@
+import { DEFAULT_CROP, type Crop, type FrameLayout } from "./frame-layout.js";
 import {
   distributeWordTimings,
   OUTPUT_PRESETS,
@@ -17,11 +18,25 @@ import { ACCENT_POOL, createVariation, sceneVariation } from "./variation.js";
  */
 export const LAYOUTS: Record<
   AspectRatio,
-  { subtitleY: number; imageFit: "cover" | "contain"; safeBottom: number; padding: number }
+  {
+    subtitleY: number;
+    imageFit: "cover" | "contain";
+    safeBottom: number;
+    padding: number;
+    /**
+     * Cỡ chữ mặc định của khổ, theo tỉ lệ **chiều cao** khung.
+     *
+     * Khung ngang cần con số lớn hơn mới ra chữ cùng cỡ so với bề ngang: 0.045 của khung
+     * dọc là 86px trên nền rộng 1080, còn 0.045 của khung ngang chỉ là 48px trên nền rộng
+     * 1920. Giữ chung một con số cho cả ba khổ là để chữ ở 16:9 bé tới mức khó đọc trên
+     * điện thoại.
+     */
+    fontScale: number;
+  }
 > = {
-  "9:16": { subtitleY: 0.78, imageFit: "cover", safeBottom: 0.22, padding: 0 },
-  "1:1": { subtitleY: 0.82, imageFit: "cover", safeBottom: 0.18, padding: 0 },
-  "16:9": { subtitleY: 0.85, imageFit: "contain", safeBottom: 0.12, padding: 0.08 },
+  "9:16": { subtitleY: 0.78, imageFit: "cover", safeBottom: 0.22, padding: 0, fontScale: 0.045 },
+  "1:1": { subtitleY: 0.82, imageFit: "cover", safeBottom: 0.18, padding: 0, fontScale: 0.052 },
+  "16:9": { subtitleY: 0.85, imageFit: "contain", safeBottom: 0.12, padding: 0.08, fontScale: 0.07 },
 };
 
 /** Thời lượng tạm cho một cảnh chưa có tiếng để đo. */
@@ -40,6 +55,8 @@ export interface BuildConfigInput {
     /** URL đã ký của media cảnh này; rỗng nghĩa là cảnh chưa có gì. */
     assetUrl: string;
     assetKind?: "image" | "video" | "gif";
+    /** Khung người dùng đã cắt cho **khổ đang dựng**; nơi gọi tự chọn đúng khổ. */
+    crop?: Crop;
   }[];
   /** Tiếng đã tổng hợp, khoá theo chỉ số cảnh. */
   voiceClips?: { sceneIndex: number; url: string; durationMs: number }[];
@@ -51,6 +68,13 @@ export interface BuildConfigInput {
    * phối phạt nội dung trùng lặp và người dùng đăng hàng chục video mỗi ngày.
    */
   variationSeed?: string;
+  /**
+   * Bố cục người dùng tự kéo ở **khổ đang dựng**.
+   *
+   * Nơi gọi chịu trách nhiệm chọn đúng khổ trước khi truyền vào, nên hàm này không cần
+   * biết tới khái niệm "lưu riêng theo khổ" — nó chỉ nhận giá trị đã chốt.
+   */
+  layout?: Partial<FrameLayout>;
 }
 
 /**
@@ -68,7 +92,9 @@ export const buildRenderConfig = (input: BuildConfigInput): RenderConfig | null 
   if (input.lines.length === 0) return null;
 
   const preset = OUTPUT_PRESETS[input.aspectRatio][input.resolution];
-  const layout = LAYOUTS[input.aspectRatio];
+  // Tách `fontScale` ra vì nó thuộc về kiểu chữ chứ không phải `LayoutSchema`; để lẫn thì
+  // zod lặng lẽ vứt đi và người đọc sau không hiểu vì sao nó có ở đây.
+  const { fontScale: defaultFontScale, ...layout } = LAYOUTS[input.aspectRatio];
 
   const seed = input.variationSeed || input.projectId;
   const variation = createVariation(seed);
@@ -89,7 +115,7 @@ export const buildRenderConfig = (input: BuildConfigInput): RenderConfig | null 
       assetUrl: line.assetUrl,
       assetKind: line.assetKind ?? "image",
       // Hướng, mức zoom và kiểu chuyển cảnh đều suy từ hạt giống — xem `variation.ts`.
-      ...sceneVariation(variation, position),
+      ...sceneVariation(variation, position, line.crop ?? DEFAULT_CROP),
       caption: {
         text: line.text,
         emphasis: line.emphasis,
@@ -116,6 +142,13 @@ export const buildRenderConfig = (input: BuildConfigInput): RenderConfig | null 
       subtitle: {
         ...input.subtitle,
         /*
+         * Cỡ chữ: khổ này người dùng đã kéo thì theo họ, chưa kéo thì theo preset kiểu
+         * chữ, chưa chọn preset thì theo mặc định của khổ. Xếp đúng thứ tự này để chọn một
+         * preset mới không bị con số cũ của khổ khác đè lên.
+         */
+        fontScale:
+          input.layout?.fontScale ?? input.subtitle?.fontScale ?? defaultFontScale,
+        /*
          * Màu chữ đang đọc lấy theo hạt giống, trừ khi người dùng đã tự chọn.
          *
          * Đây là cách rẻ nhất để đổi tín hiệu nhận dạng mà người xem không thấy lạ — cả
@@ -128,8 +161,8 @@ export const buildRenderConfig = (input: BuildConfigInput): RenderConfig | null 
       },
       layout: {
         ...layout,
-        // Vị trí người dùng tự kéo thắng bố cục mặc định của khổ.
-        subtitleY: input.subtitle?.positionY ?? layout.subtitleY,
+        // Vị trí người dùng tự kéo ở khổ này thắng bố cục mặc định của khổ.
+        subtitleY: input.layout?.subtitleY ?? layout.subtitleY,
       },
     },
     scenes,

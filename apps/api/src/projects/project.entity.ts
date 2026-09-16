@@ -9,6 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import type { Crop, FrameLayouts } from '@repo/shared';
 import { User } from '../auth/user.entity.js';
 
 /** `link` — tạo từ link sản phẩm. `manual` — người dùng tự viết nội dung. */
@@ -42,6 +43,16 @@ export interface ProjectLine {
   durationMs: number;
   /** Đoạn tiếng đã tổng hợp cho câu này; `null` khi chưa lồng tiếng. */
   voiceClipId: string | null;
+  /**
+   * Khung ảnh người dùng tự cắt, **lưu riêng cho từng khổ video**.
+   *
+   * Vắng mặt nghĩa là chưa ai đụng tới, và cảnh dùng khung mặc định — nên các dự án dựng
+   * trước khi có tính năng này không cần backfill, khác với `durationMs` trước đây.
+   *
+   * Tách theo khổ vì cắt cho khung dọc và khung ngang là hai việc khác nhau: ảnh sản phẩm
+   * đứng giữa khung 9:16 thì thả sang 16:9 sẽ thừa hai bên, và điểm cần giữ lại cũng khác.
+   */
+  crop?: Partial<Record<AspectRatio, Crop>>;
 }
 
 /**
@@ -108,6 +119,17 @@ export class Project {
    */
   @Column({ name: 'subtitle_style', type: 'jsonb', default: () => `'{}'::jsonb` })
   subtitleStyle!: Record<string, unknown>;
+
+  /**
+   * Bố cục phụ đề người dùng tự kéo trên khung xem trước, **theo từng khổ**.
+   *
+   * Không gộp vào `subtitle_style` vì hai thứ khác bản chất: kiểu chữ là phong cách và
+   * theo người dùng qua mọi khổ, còn vị trí và cỡ chữ là bố cục và chỉ đúng cho một khổ.
+   * Gộp lại thì đổi khổ sẽ kéo theo con số của khổ cũ, đúng lỗi mà cột này sinh ra để
+   * tránh. Khổ nào chưa có khoá thì dùng mặc định trong `LAYOUTS` của `@repo/shared`.
+   */
+  @Column({ name: 'frame_layouts', type: 'jsonb', default: () => `'{}'::jsonb` })
+  frameLayouts!: FrameLayouts;
 
   /**
    * Giọng đọc đã chọn. `null` khi người dùng chưa chọn hoặc giọng đó bị gỡ khỏi danh mục.

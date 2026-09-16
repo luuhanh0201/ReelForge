@@ -103,7 +103,9 @@ export class ProjectsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('index', ParseIntPipe) index: number,
     @Body()
-    body: Partial<Pick<ProjectLine, 'text' | 'assetId' | 'emphasis' | 'durationMs'>>,
+    body: Partial<
+      Pick<ProjectLine, 'text' | 'assetId' | 'emphasis' | 'durationMs' | 'crop'>
+    >,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<Project> {
     return this.projects.updateLine(id, user.id, index, body);

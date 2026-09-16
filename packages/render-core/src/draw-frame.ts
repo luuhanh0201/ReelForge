@@ -1,4 +1,4 @@
-import type { RenderConfig, Scene, SubtitleStyle } from "@repo/shared";
+import type { RenderConfig, Scene } from "@repo/shared";
 
 /**
  * Trái tim của hệ thống: vẽ **một** khung hình tại một mốc thời gian.
@@ -141,20 +141,30 @@ const drawSceneImage = (
   );
 };
 
+interface MeasuredCaption {
+  lines: Scene["caption"]["words"][];
+  fontSize: number;
+  lineHeight: number;
+  /** Tâm dòng đầu tiên, tính bằng pixel trong khung hình. */
+  baseY: number;
+}
+
 /**
- * Vẽ phụ đề với từ đang đọc được làm nổi.
+ * Đo khối phụ đề: ngắt dòng theo bề rộng thật của chữ rồi tính chỗ nó sẽ nằm.
  *
- * Mốc sáng của từng từ nằm sẵn trong `caption.words` (máy chủ đã chia theo độ dài ký tự),
- * nên ở đây chỉ là so sánh mốc thời gian — không đoán, không tính lại.
+ * Tách khỏi `drawCaption` để **cảnh báo safe zone dùng đúng phép đo mà bộ vẽ dùng**. Viết
+ * lại phép đo ở giao diện thì có ngày nó bảo "chữ nằm trong vùng an toàn" trong khi khung
+ * hình thật đã tràn — và người dùng chỉ biết sau khi tải video về.
+ *
+ * Hàm đặt luôn `ctx.font`, vì đo bề rộng mà không đúng font thì mọi con số sau đó đều sai.
  */
-const drawCaption = (
+const measureCaption = (
   ctx: CanvasRenderingContext2D,
   config: RenderConfig,
   scene: Scene,
-  timeMs: number,
-): void => {
+): MeasuredCaption | null => {
   const words = scene.caption.words;
-  if (words.length === 0) return;
+  if (words.length === 0) return null;
 
   const { width, height } = config.output;
   const style = config.template.subtitle;
@@ -162,8 +172,6 @@ const drawCaption = (
   const lineHeight = Math.round(fontSize * 1.35);
 
   ctx.font = `${style.fontWeight} ${fontSize}px "${style.fontFamily}", system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
 
   // Xuống dòng theo bề rộng thật của chữ, chừa lề hai bên.
   const maxWidth = width * 0.86;
@@ -184,7 +192,64 @@ const drawCaption = (
   if (current.length > 0) lines.push(current);
 
   const blockHeight = lines.length * lineHeight;
-  const baseY = height * config.template.layout.subtitleY - blockHeight / 2;
+
+  return {
+    lines,
+    fontSize,
+    lineHeight,
+    baseY: height * config.template.layout.subtitleY - blockHeight / 2,
+  };
+};
+
+/** Mép trên và mép dưới của khối phụ đề, theo **tỉ lệ chiều cao khung**. */
+export interface CaptionBounds {
+  top: number;
+  bottom: number;
+  lineCount: number;
+}
+
+/**
+ * Khối phụ đề của một cảnh chiếm khoảng nào theo chiều dọc.
+ *
+ * Giao diện dùng nó để biết chữ có thò vào vùng bị nút nền tảng che hay không. Trả `null`
+ * khi cảnh chưa có chữ — lúc đó không có gì để cảnh báo.
+ */
+export const captionBounds = (
+  ctx: CanvasRenderingContext2D,
+  config: RenderConfig,
+  scene: Scene,
+): CaptionBounds | null => {
+  const measured = measureCaption(ctx, config, scene);
+  if (!measured) return null;
+
+  const { height } = config.output;
+  const top = measured.baseY;
+  const bottom = top + measured.lines.length * measured.lineHeight;
+
+  return { top: top / height, bottom: bottom / height, lineCount: measured.lines.length };
+};
+
+/**
+ * Vẽ phụ đề với từ đang đọc được làm nổi.
+ *
+ * Mốc sáng của từng từ nằm sẵn trong `caption.words` (máy chủ đã chia theo độ dài ký tự),
+ * nên ở đây chỉ là so sánh mốc thời gian — không đoán, không tính lại.
+ */
+const drawCaption = (
+  ctx: CanvasRenderingContext2D,
+  config: RenderConfig,
+  scene: Scene,
+  timeMs: number,
+): void => {
+  const measured = measureCaption(ctx, config, scene);
+  if (!measured) return;
+
+  const { width } = config.output;
+  const style = config.template.subtitle;
+  const { lines, fontSize, lineHeight, baseY } = measured;
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
 
   lines.forEach((line, lineIndex) => {
     const text = line.map((item) => label(item.text, style)).join(" ");

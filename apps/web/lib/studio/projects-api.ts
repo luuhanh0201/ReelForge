@@ -1,4 +1,4 @@
-import type { SubtitleStyle } from "@repo/shared";
+import type { Crop, FrameLayouts, SubtitleStyle } from "@repo/shared";
 import { API_BASE_URL, request } from "@/lib/admin/api-client";
 
 export type ProjectMode = "link" | "manual";
@@ -17,6 +17,8 @@ export interface ProjectLine {
   durationMs: number;
   /** Đoạn tiếng đã tổng hợp cho câu này; `null` khi chưa lồng tiếng. */
   voiceClipId: string | null;
+  /** Khung ảnh người dùng tự cắt, riêng cho từng khổ. Vắng mặt = chưa cắt. */
+  crop?: Partial<Record<AspectRatio, Crop>>;
 }
 
 export interface Project {
@@ -32,6 +34,8 @@ export interface Project {
   scriptTemplate: string | null;
   /** Rỗng nghĩa là chưa chỉnh gì; `SubtitleStyleSchema` sẽ điền mặc định. */
   subtitleStyle: Partial<SubtitleStyle>;
+  /** Vị trí và cỡ chữ người dùng tự kéo, khoá theo khổ. Khổ thiếu khoá = dùng mặc định. */
+  frameLayouts: FrameLayouts;
   /** `null` khi chưa chọn, hoặc khi giọng đã chọn bị gỡ khỏi danh mục. */
   voiceId: string | null;
   /** 0.8–1.5. */
@@ -100,6 +104,7 @@ export const updateProject = (
       | "resolution"
       | "product"
       | "subtitleStyle"
+      | "frameLayouts"
       | "voiceId"
       | "voiceSpeed"
     >
@@ -133,7 +138,9 @@ export const applyScriptTemplate = (
 export const updateLine = (
   id: string,
   index: number,
-  patch: Partial<Pick<ProjectLine, "text" | "assetId" | "emphasis" | "durationMs">>,
+  patch: Partial<
+    Pick<ProjectLine, "text" | "assetId" | "emphasis" | "durationMs" | "crop">
+  >,
 ): Promise<Project> =>
   request<Project>(`/projects/${id}/lines/${index}`, {
     method: "PATCH",

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ImageMap } from "@repo/render-core";
-import type { SubtitleStyle } from "@repo/shared";
+import { LAYOUTS, type Crop, type FrameLayout, type FrameLayouts, type SubtitleStyle } from "@repo/shared";
 import { useApp } from "@/lib/app-provider";
 import {
   addLine,
@@ -60,9 +60,37 @@ import { ToastProvider, useToast } from "@/components/ui/toast";
 interface Snapshot {
   lines: ProjectLine[];
   subtitleStyle: Partial<SubtitleStyle>;
+  /** Bố cục xem trước của cả ba khổ; kéo nhầm phụ đề phải hoàn tác lại được. */
+  frameLayouts: Project["frameLayouts"];
   voiceId: string | null;
   voiceSpeed: number;
 }
+
+/**
+ * Ghi bố cục vừa kéo vào **đúng khổ đang mở**, giữ nguyên hai khổ còn lại.
+ *
+ * Đây là chỗ duy nhất biết cách gộp, nên không có đường nào vô tình ghi đè bố cục của một
+ * khổ khác — lỗi mà người dùng chỉ phát hiện sau khi đã đổi khổ và thấy công kéo biến mất.
+ */
+const mergeLayout = (project: Project, patch: Partial<FrameLayout>): FrameLayouts => ({
+  ...project.frameLayouts,
+  [project.aspectRatio]: {
+    subtitleY: null,
+    fontScale: null,
+    ...project.frameLayouts[project.aspectRatio],
+    ...patch,
+  },
+});
+
+/** Cùng nguyên tắc, cho khung cắt ảnh của một cảnh. */
+const mergeCrop = (
+  project: Project,
+  line: ProjectLine | undefined,
+  crop: Crop,
+): NonNullable<ProjectLine["crop"]> => ({
+  ...line?.crop,
+  [project.aspectRatio]: crop,
+});
 
 /**
  * Phòng dựng video — bố cục dock 4 phân vùng, chiếm trọn màn hình.
@@ -108,6 +136,15 @@ function StudioEditor() {
   const [dragDuration, setDragDuration] = useState<
     { index: number; durationMs: number } | null
   >(null);
+
+  /**
+   * Ảnh chụp trạng thái ngay trước cú kéo đang diễn ra.
+   *
+   * Kéo sinh ra hàng chục lần cập nhật rồi mới tới một lần lưu; chụp lúc lưu là chụp đúng
+   * kết quả vừa kéo, và nút Hoàn tác sẽ không đưa về đâu được. Ghi lần đổi đầu tiên của
+   * mỗi cú kéo, và tiêu thụ nó khi thả tay.
+   */
+  const dragUndo = useRef<Snapshot | null>(null);
   const [images, setImages] = useState<ImageMap>(new Map());
   // Hàm tua video; thay mỗi khi nạp lại media, nên giữ trong state chứ không phải ref.
   const [seekMedia, setSeekMedia] = useState<(timeMs: number) => void>(() => () => undefined);
@@ -197,6 +234,12 @@ function StudioEditor() {
     };
   }, [projectId, user]);
 
+  /** Khung cắt của **khổ đang mở**, xếp theo chỉ số cảnh để khung xem trước tra thẳng. */
+  const crops = useMemo(
+    () => project?.lines.map((line) => line.crop?.[project.aspectRatio]) ?? [],
+    [project],
+  );
+
   const sceneDurations = useMemo(
     () =>
       project?.lines.map((line, position) =>
@@ -283,15 +326,26 @@ function StudioEditor() {
     return {
       lines: current.lines.map((line) => ({ ...line, emphasis: [...line.emphasis] })),
       subtitleStyle: { ...current.subtitleStyle },
+      frameLayouts: { ...current.frameLayouts },
       voiceId: current.voiceId,
       voiceSpeed: current.voiceSpeed,
     };
   }, []);
 
-  /** Gọi máy chủ kèm đèn báo lưu. `track` = có ghi vào ngăn xếp hoàn tác hay không. */
+  /**
+   * Gọi máy chủ kèm đèn báo lưu. `track` = có ghi vào ngăn xếp hoàn tác hay không.
+   *
+   * `before` dành cho các thao tác **kéo**: lúc thả tay thì trạng thái trên màn hình đã là
+   * trạng thái mới rồi, chụp tại đó sẽ cho một bước hoàn tác không đưa được về đâu cả. Nơi
+   * gọi tự chụp từ trước khi kéo và truyền vào đây.
+   */
   const run = useCallback(
-    async (task: () => Promise<Project>, track = true) => {
-      const before = track ? snapshot() : null;
+    async (
+      task: () => Promise<Project>,
+      track = true,
+      before?: Snapshot | null,
+    ) => {
+      const previous = track ? (before !== undefined ? before : snapshot()) : null;
 
       setBusy(true);
       setSaveState("saving");
@@ -301,7 +355,7 @@ function StudioEditor() {
         const updated = await task();
         setProject(updated);
         setSaveState("saved");
-        if (before) history.push(before);
+        if (previous) history.push(previous);
       } catch (cause) {
         setSaveState("error");
         setError(cause instanceof Error ? cause.message : "Không lưu được thay đổi");
@@ -311,6 +365,23 @@ function StudioEditor() {
     },
     [history, setError, snapshot],
   );
+
+  /** Chụp trạng thái ở lần đổi **đầu tiên** của một cú kéo; các lần sau bỏ qua. */
+  const beginDrag = useCallback(() => {
+    dragUndo.current ??= snapshot();
+  }, [snapshot]);
+
+  /**
+   * Lấy và xoá ảnh chụp của cú kéo vừa xong.
+   *
+   * Trả `undefined` khi không có cú kéo nào — chẳng hạn nút "Đặt lại khung ảnh" — để `run`
+   * tự chụp như mọi thao tác bấm một phát khác.
+   */
+  const endDrag = useCallback((): Snapshot | undefined => {
+    const before = dragUndo.current;
+    dragUndo.current = null;
+    return before ?? undefined;
+  }, []);
 
   /** Khôi phục cả ảnh chụp trong hai lệnh, thay vì sửa lại từng cảnh một. */
   const restore = useCallback(
@@ -323,6 +394,7 @@ function StudioEditor() {
         await replaceLines(projectId, target.lines);
         const updated = await updateProject(projectId, {
           subtitleStyle: target.subtitleStyle,
+          frameLayouts: target.frameLayouts,
           voiceId: target.voiceId,
           voiceSpeed: target.voiceSpeed,
         });
@@ -474,6 +546,30 @@ function StudioEditor() {
 
   const line = project.lines[activeIndex];
 
+  /**
+   * Cỡ chữ đang có hiệu lực ở khổ này.
+   *
+   * Xếp theo đúng thứ tự mà `buildRenderConfig` dùng, để thanh trượt trong panel và khung
+   * xem trước không bao giờ hiển thị hai con số khác nhau.
+   */
+  const fontScale =
+    project.frameLayouts[project.aspectRatio]?.fontScale ??
+    project.subtitleStyle.fontScale ??
+    LAYOUTS[project.aspectRatio].fontScale;
+
+  /** Kéo: đổi ngay trên màn hình. Dùng chung cho khung xem trước và thanh trượt cỡ chữ. */
+  const changeLayout = (patch: Partial<FrameLayout>) => {
+    beginDrag();
+    setProject({ ...project, frameLayouts: mergeLayout(project, patch) });
+  };
+
+  const commitLayout = (patch: Partial<FrameLayout>) =>
+    void run(
+      () => updateProject(projectId, { frameLayouts: mergeLayout(project, patch) }),
+      true,
+      endDrag(),
+    );
+
   const patchLine = (patch: Partial<ProjectLine>) => {
     if (!line) return;
     const next = [...project.lines];
@@ -624,17 +720,28 @@ function StudioEditor() {
                 showCaption={showCaption}
                 showImage={showImage}
                 onToggleSafeZone={() => setShowSafeZone((value) => !value)}
-                onSubtitleYChange={(positionY) =>
+                crops={crops}
+                onLayoutChange={changeLayout}
+                onLayoutCommit={commitLayout}
+                onCropChange={(index, crop) => {
+                  beginDrag();
                   setProject({
                     ...project,
-                    subtitleStyle: { ...project.subtitleStyle, positionY },
-                  })
-                }
-                onSubtitleYCommit={(positionY) =>
-                  void run(() =>
-                    updateProject(projectId, {
-                      subtitleStyle: { ...project.subtitleStyle, positionY },
-                    }),
+                    lines: project.lines.map((item) =>
+                      item.index === index
+                        ? { ...item, crop: mergeCrop(project, item, crop) }
+                        : item,
+                    ),
+                  });
+                }}
+                onCropCommit={(index, crop) =>
+                  void run(
+                    () =>
+                      updateLine(projectId, index, {
+                        crop: mergeCrop(project, project.lines[index], crop),
+                      }),
+                    true,
+                    endDrag(),
                   )
                 }
               />
@@ -658,6 +765,9 @@ function StudioEditor() {
             voices={voices}
             duration={duration}
             subtitle={project.subtitleStyle}
+            fontScale={fontScale}
+            onLayoutChange={changeLayout}
+            onLayoutCommit={commitLayout}
             busy={busy}
             onDurationChange={setDuration}
             onApplyTemplate={(code) =>

@@ -1,3 +1,4 @@
+import { DEFAULT_CROP, type Crop } from "./frame-layout.js";
 import { TRANSITIONS } from "./render-config.js";
 
 /**
@@ -95,10 +96,16 @@ export interface SceneVariation {
  *
  * Cảnh liền nhau vẫn phải khác hướng nhau: đó là lý do chỉ số cảnh được trộn vào kênh, và
  * hướng được lệch thêm theo vị trí chẵn lẻ.
+ *
+ * @param crop Khung người dùng đã tự cắt cho cảnh này. Ken Burns chạy **quanh khung đó**
+ * chứ không quanh tâm ảnh: người ta cắt để giữ lấy món hàng trong khung, chuyển động mà
+ * kéo ra khỏi đó là xoá luôn công họ vừa làm. Bỏ trống thì rơi về tâm ảnh, đúng bằng hành
+ * vi trước khi có tính năng cắt.
  */
 export const sceneVariation = (
   variation: ReturnType<typeof createVariation>,
   position: number,
+  crop: Crop = DEFAULT_CROP,
 ): SceneVariation => {
   const direction =
     KEN_BURNS_DIRECTIONS[
@@ -112,12 +119,14 @@ export const sceneVariation = (
   // Cảnh chẵn phóng vào, cảnh lẻ lùi ra — giữ nhịp thị giác không đơn điệu.
   const zoomIn = position % 2 === 0;
 
+  // Hướng được tính lệch so với tâm rồi cộng vào khung người dùng chọn, nên khung mặc định
+  // cho ra đúng những con số cũ.
   const near: [number, number, number] = [
-    direction[0] + offset,
-    direction[1] + offset,
-    zoom,
+    crop.x + (direction[0] - 0.5) + offset,
+    crop.y + (direction[1] - 0.5) + offset,
+    crop.zoom * zoom,
   ];
-  const far: [number, number, number] = [0.5 + offset, 0.5 + offset, 1];
+  const far: [number, number, number] = [crop.x + offset, crop.y + offset, crop.zoom];
 
   return {
     kenBurns: zoomIn ? { from: far, to: near } : { from: near, to: far },

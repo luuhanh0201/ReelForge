@@ -118,10 +118,13 @@ export class RenderConfigService {
               : line.durationMs,
           assetUrl: urls.get(line.assetId!)!,
           assetKind: asset.kind,
+          // Khung cắt của **đúng khổ đang dựng**; khổ khác có khung riêng.
+          crop: line.crop?.[project.aspectRatio],
         };
       }),
       voiceClips,
       variationSeed,
+      layout: project.frameLayouts[project.aspectRatio],
     });
 
     if (!config) {

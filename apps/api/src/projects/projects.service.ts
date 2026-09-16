@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { speechChanged } from '@repo/shared';
+import {
+  FrameLayoutsSchema,
+  SceneCropsSchema,
+  speechChanged,
+  type FrameLayouts,
+} from '@repo/shared';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import { MediaAsset } from '../media/media-asset.entity.js';
 import {
@@ -34,6 +39,7 @@ export interface UpdateProjectInput {
   resolution?: Resolution;
   product?: Record<string, unknown>;
   subtitleStyle?: Record<string, unknown>;
+  frameLayouts?: unknown;
   voiceId?: string | null;
   voiceSpeed?: number;
 }
@@ -103,6 +109,7 @@ export class ProjectsService {
     project.lines = [];
     project.scriptTemplate = null;
     project.subtitleStyle = {};
+    project.frameLayouts = {};
     project.voiceId = null;
     project.voiceSpeed = 1;
 
@@ -140,6 +147,10 @@ export class ProjectsService {
 
     if (input.subtitleStyle !== undefined) {
       project.subtitleStyle = input.subtitleStyle;
+    }
+
+    if (input.frameLayouts !== undefined) {
+      project.frameLayouts = this.assertFrameLayouts(input.frameLayouts);
     }
 
     if (input.voiceId !== undefined) {
@@ -253,7 +264,9 @@ export class ProjectsService {
     id: string,
     userId: string,
     index: number,
-    patch: Partial<Pick<ProjectLine, 'text' | 'assetId' | 'emphasis' | 'durationMs'>>,
+    patch: Partial<
+      Pick<ProjectLine, 'text' | 'assetId' | 'emphasis' | 'durationMs' | 'crop'>
+    >,
   ): Promise<Project> {
     const project = await this.findOwned(id, userId);
     const line = project.lines[index];
@@ -303,6 +316,18 @@ export class ProjectsService {
       }
     }
     if (patch.emphasis !== undefined) line.emphasis = patch.emphasis;
+
+    if (patch.crop !== undefined) {
+      const parsed = SceneCropsSchema.safeParse(patch.crop);
+
+      if (!parsed.success) {
+        throw new BusinessException('VALIDATION_FAILED', {
+          message: 'Khung cắt ảnh không hợp lệ',
+        });
+      }
+
+      line.crop = parsed.data;
+    }
 
     if (patch.durationMs !== undefined) {
       // Video quyết định độ dài cảnh của nó; kéo tay sẽ cắt cụt hình giữa chừng.
@@ -398,6 +423,9 @@ export class ProjectsService {
     const copy: ProjectLine = {
       ...source,
       emphasis: [...source.emphasis],
+      // Chép cả khung cắt, nhưng phải là bản sao: dùng chung một đối tượng thì cắt lại ở
+      // cảnh này sẽ đổi luôn cảnh kia.
+      crop: source.crop ? { ...source.crop } : undefined,
     };
 
     const lines = [...project.lines];
@@ -469,6 +497,18 @@ export class ProjectsService {
         });
       }
 
+      /*
+       * Khung cắt phải đi qua đây, nếu không mỗi lần hoàn tác là xoá sạch công cắt ảnh
+       * của người dùng — hàm này dựng lại từng cảnh từ đầu chứ không vá lên cảnh cũ.
+       */
+      const crop = SceneCropsSchema.safeParse(line.crop ?? {});
+
+      if (!crop.success) {
+        throw new BusinessException('VALIDATION_FAILED', {
+          message: 'Khung cắt ảnh không hợp lệ',
+        });
+      }
+
       return {
         index,
         text,
@@ -480,6 +520,9 @@ export class ProjectsService {
         durationMs: Math.round(line.durationMs),
         voiceClipId:
           typeof line.voiceClipId === 'string' ? line.voiceClipId : null,
+        // Chỉ ghi khoá khi thật sự có khung cắt: `{}` rỗng chỉ làm phình jsonb của mọi
+        // cảnh mà không mang thêm thông tin gì.
+        crop: Object.keys(crop.data).length > 0 ? crop.data : undefined,
       };
     });
 
@@ -510,6 +553,25 @@ export class ProjectsService {
     }));
 
     return this.projects.save(project);
+  }
+
+  /**
+   * Kiểm tra bố cục do trình duyệt gửi lên bằng **chính schema mà bộ dựng config dùng**.
+   *
+   * Không kiểm ở đây thì một giá trị hỏng vẫn lưu được, và người dùng chỉ biết khi bấm
+   * xuất video rồi nhận lỗi từ tận `RenderConfigSchema` — cách chỗ sai vài thao tác và
+   * không gợi ý được gì.
+   */
+  private assertFrameLayouts(value: unknown): FrameLayouts {
+    const parsed = FrameLayoutsSchema.safeParse(value);
+
+    if (!parsed.success) {
+      throw new BusinessException('VALIDATION_FAILED', {
+        message: 'Bố cục xem trước không hợp lệ',
+      });
+    }
+
+    return parsed.data;
   }
 
   private assertAspectRatio(value: AspectRatio): AspectRatio {

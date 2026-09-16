@@ -109,8 +109,14 @@ export const SceneSchema = z.object({
  */
 export const SubtitleStyleSchema = z.object({
   fontFamily: z.string().default("Be Vietnam Pro"),
-  /** Theo tỉ lệ chiều cao khung, không phải pixel — đổi độ phân giải không làm vỡ bố cục. */
-  fontScale: z.number().min(0.02).max(0.12).default(0.045),
+  /**
+   * Theo tỉ lệ chiều cao khung, không phải pixel — đổi độ phân giải không làm vỡ bố cục.
+   *
+   * Trần nới tới 0.14 vì khung ngang cần cỡ chữ lớn hơn theo chiều cao mới đọc được: 0.045
+   * ở 1080x1920 là 86px trên khung rộng 1080, còn ở 1920x1080 chỉ còn 48px trên khung rộng
+   * 1920 — nhỏ đi gần ba lần so với bề ngang.
+   */
+  fontScale: z.number().min(0.02).max(0.14).default(0.045),
   fontWeight: z.union([z.literal(600), z.literal(700), z.literal(800), z.literal(900)]).default(700),
   color: z.string().default("#FFFFFF"),
   /** Màu của từ đang được đọc. */
@@ -123,14 +129,6 @@ export const SubtitleStyleSchema = z.object({
   shadowBlur: z.number().min(0).max(40).default(0),
   animation: z.enum(["karaoke_glow", "pop_scale", "fade_slide", "color_fill"]).default("karaoke_glow"),
   uppercase: z.boolean().default(false),
-  /**
-   * Vị trí khối phụ đề theo chiều dọc, tính bằng tỉ lệ chiều cao khung.
-   *
-   * `null` nghĩa là **theo bố cục mặc định của khổ video** — đáy khung dọc, cao hơn ở khung
-   * ngang. Người dùng kéo tay thì giá trị này được ghi đè, và giữ nguyên khi họ đổi khổ
-   * hoặc đổi preset, vì đó là quyết định có chủ ý của họ.
-   */
-  positionY: z.number().min(0.1).max(0.95).nullable().default(null),
 });
 
 export type SubtitleStyle = z.infer<typeof SubtitleStyleSchema>;

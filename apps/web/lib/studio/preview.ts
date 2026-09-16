@@ -51,6 +51,8 @@ export const buildPreviewConfig = (
             : base,
         assetUrl: asset?.url ?? "",
         assetKind: asset?.kind ?? "image",
+        // Chỉ lấy khung cắt của khổ đang mở; khổ khác có khung riêng của nó.
+        crop: line.crop?.[project.aspectRatio],
       };
     }),
     voiceClips: voiceClips.map((clip) => ({
@@ -58,6 +60,9 @@ export const buildPreviewConfig = (
       url: clip.url,
       durationMs: clip.durationMs,
     })),
+    // Bố cục riêng của khổ đang mở; kéo tay cập nhật thẳng vào `project` nên khung xem
+    // trước đổi theo ngay, không cần đường truyền riêng.
+    layout: project.frameLayouts[project.aspectRatio],
   });
 };
 

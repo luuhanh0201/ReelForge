@@ -14,7 +14,12 @@ import {
   Wand2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SUBTITLE_PRESETS, type SubtitleStyle } from "@repo/shared";
+import {
+  SUBTITLE_PRESETS,
+  type AspectRatio,
+  type FrameLayout,
+  type SubtitleStyle,
+} from "@repo/shared";
 import {
   DURATION_OPTIONS,
   MAX_VOICE_SPEED,
@@ -70,6 +75,9 @@ export function SubtitlePanel({
   onEmphasisChange,
   onSubtitleChange,
   onSubtitleCommit,
+  fontScale,
+  onLayoutChange,
+  onLayoutCommit,
   onAssignAsset,
   onUploadAsset,
   onDeleteAsset,
@@ -104,6 +112,10 @@ export function SubtitlePanel({
    * hàm lưu chỉ nhận `() => void` rồi tự đi tìm giá trị mới sẽ gửi đúng giá trị cũ.
    */
   onSubtitleCommit: (style: Partial<SubtitleStyle>) => void;
+  /** Cỡ chữ **đã chốt cho khổ đang mở** — cùng con số mà khung xem trước đang vẽ. */
+  fontScale: number;
+  onLayoutChange: (patch: Partial<FrameLayout>) => void;
+  onLayoutCommit: (patch: Partial<FrameLayout>) => void;
   onAssignAsset: (assetId: string) => void;
   onUploadAsset: (file: File) => void;
   onDeleteAsset: (assetId: string) => void;
@@ -167,6 +179,10 @@ export function SubtitlePanel({
             subtitle={subtitle}
             onChange={onSubtitleChange}
             onCommit={onSubtitleCommit}
+            aspectRatio={project.aspectRatio}
+            fontScale={fontScale}
+            onLayoutChange={onLayoutChange}
+            onLayoutCommit={onLayoutCommit}
             speed={project.voiceSpeed}
             onSpeedChange={onSpeedChange}
             onSpeedCommit={onSpeedCommit}
@@ -472,6 +488,10 @@ function SubtitleTab({
   subtitle,
   onChange,
   onCommit,
+  aspectRatio,
+  fontScale,
+  onLayoutChange,
+  onLayoutCommit,
   speed,
   onSpeedChange,
   onSpeedCommit,
@@ -479,6 +499,10 @@ function SubtitleTab({
   subtitle: Partial<SubtitleStyle>;
   onChange: (patch: Partial<SubtitleStyle>) => void;
   onCommit: (style: Partial<SubtitleStyle>) => void;
+  aspectRatio: AspectRatio;
+  fontScale: number;
+  onLayoutChange: (patch: Partial<FrameLayout>) => void;
+  onLayoutCommit: (patch: Partial<FrameLayout>) => void;
   speed: number;
   onSpeedChange: (speed: number) => void;
   onSpeedCommit: (speed: number) => void;
@@ -487,6 +511,17 @@ function SubtitleTab({
   const apply = (patch: Partial<SubtitleStyle>) => {
     onChange(patch);
     onCommit({ ...subtitle, ...patch });
+  };
+
+  /**
+   * Chọn một kiểu có sẵn thì trả cỡ chữ về cho kiểu đó quyết định.
+   *
+   * Không xoá thì con số người dùng từng kéo ở khổ này vẫn thắng, và họ bấm đổi kiểu mà
+   * thấy cỡ chữ đứng yên — không đoán được vì sao.
+   */
+  const applyPreset = (patch: Partial<SubtitleStyle>) => {
+    apply(patch);
+    onLayoutCommit({ fontScale: null });
   };
 
   // Thanh trượt lưu lúc thả tay, khi `subtitle` đã mang giá trị mới nhất.
@@ -500,7 +535,7 @@ function SubtitleTab({
             <button
               key={preset.code}
               type="button"
-              onClick={() => apply(preset.style)}
+              onClick={() => applyPreset(preset.style)}
               title={preset.hint}
               className="rounded-btn border border-line bg-canvas p-2 text-left transition-colors hover:border-brand/45"
             >
@@ -542,15 +577,22 @@ function SubtitleTab({
       </Section>
 
       <Section title="Cỡ chữ và độ đậm">
+        {/*
+          * Cỡ chữ lưu **riêng cho khổ đang mở**, không nằm trong kiểu chữ.
+          *
+          * Con số này tính theo chiều cao khung, nên cùng một giá trị cho ra chữ to nhỏ
+          * rất khác giữa khung dọc và khung ngang. Dùng chung một con số là để người dùng
+          * chỉnh vừa mắt ở 9:16 rồi đổi sang 16:9 và thấy chữ bé lại.
+          */}
         <SliderRow
-          label="Cỡ chữ"
-          value={subtitle.fontScale ?? 0.045}
+          label={`Cỡ chữ (khổ ${aspectRatio})`}
+          value={fontScale}
           min={0.02}
-          max={0.12}
+          max={0.14}
           step={0.002}
-          display={`${Math.round((subtitle.fontScale ?? 0.045) * 1000) / 10}% chiều cao`}
-          onChange={(fontScale) => onChange({ fontScale })}
-          onCommit={commitCurrent}
+          display={`${Math.round(fontScale * 1000) / 10}% chiều cao`}
+          onChange={(value) => onLayoutChange({ fontScale: value })}
+          onCommit={() => onLayoutCommit({ fontScale })}
         />
 
         <div className="mt-2 flex gap-1">
