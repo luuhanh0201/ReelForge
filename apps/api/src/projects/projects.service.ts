@@ -3,9 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
   FrameLayoutsSchema,
+  ProductInfoSchema,
   SceneCropsSchema,
   speechChanged,
   type FrameLayouts,
+  type ProductInfo,
 } from '@repo/shared';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import { MediaAsset } from '../media/media-asset.entity.js';
@@ -37,7 +39,7 @@ export interface UpdateProjectInput {
   title?: string;
   aspectRatio?: AspectRatio;
   resolution?: Resolution;
-  product?: Record<string, unknown>;
+  product?: unknown;
   subtitleStyle?: Record<string, unknown>;
   frameLayouts?: unknown;
   voiceId?: string | null;
@@ -49,12 +51,22 @@ export interface ApplyTemplateInput {
   durationSec: number;
 }
 
+/** Tên gán khi người dùng tạo dự án mà bỏ trống ô tên. */
+export const UNTITLED_PROJECT = 'Dự án chưa đặt tên';
+
 /** Trần số cảnh, suy từ độ dài tối đa: 60 giây, mỗi cảnh khoảng 10 giây. */
 export const MAX_LINES = MAX_DURATION_SEC / SECONDS_PER_LINE;
 
 const ASPECT_RATIOS: readonly AspectRatio[] = ['9:16', '1:1', '16:9'];
 const LINE_ROLES: readonly ProjectLine['role'][] = ['hook', 'usp', 'cta'];
 const RESOLUTIONS: readonly Resolution[] = ['720p', '1080p', '2k'];
+
+const PRODUCT_FIELD_LABELS = {
+  name: 'Tên sản phẩm',
+  price: 'Giá bán',
+  originalPrice: 'Giá gốc',
+  description: 'Mô tả sản phẩm',
+} as const;
 
 @Injectable()
 export class ProjectsService {
@@ -99,7 +111,7 @@ export class ProjectsService {
 
     const project = new Project();
     project.userId = userId;
-    project.title = input.title?.trim() || 'Dự án chưa đặt tên';
+    project.title = input.title?.trim() || UNTITLED_PROJECT;
     project.mode = input.mode;
     project.status = 'draft';
     project.aspectRatio = this.assertAspectRatio(input.aspectRatio ?? '9:16');
@@ -142,7 +154,7 @@ export class ProjectsService {
     }
 
     if (input.product !== undefined) {
-      project.product = input.product;
+      project.product = this.assertProduct(input.product);
     }
 
     if (input.subtitleStyle !== undefined) {
@@ -169,6 +181,28 @@ export class ProjectsService {
         });
       }
       project.voiceSpeed = input.voiceSpeed;
+    }
+
+    return this.projects.save(project);
+  }
+
+  /**
+   * Lưu kết quả đọc link. Tách khỏi `update` vì `sourceUrl` không phải thứ người dùng sửa
+   * qua PATCH: nó chỉ đổi khi link thực sự được đọc.
+   */
+  async recordImport(
+    id: string,
+    userId: string,
+    sourceUrl: string,
+    product: ProductInfo,
+  ): Promise<Project> {
+    const project = await this.findOwned(id, userId);
+    project.sourceUrl = sourceUrl;
+    project.product = this.assertProduct(product);
+
+    // Người dùng bỏ trống ô tên lúc tạo thì tên sản phẩm là cái tên tốt nhất có được.
+    if (project.title === UNTITLED_PROJECT && project.product.name) {
+      project.title = project.product.name.slice(0, 200);
     }
 
     return this.projects.save(project);
@@ -221,7 +255,9 @@ export class ProjectsService {
       });
     }
 
-    const product = project.product as { name?: string; price?: string };
+    // Dữ liệu cũ hỏng thì coi như chưa có sản phẩm: mẫu vẫn chạy với chữ trung tính.
+    const parsed = ProductInfoSchema.safeParse(project.product);
+    const product = parsed.success ? parsed.data : {};
     const lines = buildLinesFromTemplate(template, input.durationSec, product);
     const previousAssets = project.lines.map((line) => line.assetId);
 
@@ -568,6 +604,24 @@ export class ProjectsService {
     if (!parsed.success) {
       throw new BusinessException('VALIDATION_FAILED', {
         message: 'Bố cục xem trước không hợp lệ',
+      });
+    }
+
+    return parsed.data;
+  }
+
+  private assertProduct(value: unknown): ProductInfo {
+    const parsed = ProductInfoSchema.safeParse(value);
+
+    if (!parsed.success) {
+      const field = parsed.error.issues[0]?.path[0];
+      const label =
+        typeof field === 'string' && field in PRODUCT_FIELD_LABELS
+          ? PRODUCT_FIELD_LABELS[field as keyof typeof PRODUCT_FIELD_LABELS]
+          : 'Thông tin sản phẩm';
+
+      throw new BusinessException('VALIDATION_FAILED', {
+        message: `${label} không hợp lệ hoặc quá dài`,
       });
     }
 

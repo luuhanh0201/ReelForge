@@ -13,6 +13,7 @@ import { AppService } from './app.service.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { configuration } from './config/configuration.js';
 import { CreditsModule } from './credits/credits.module.js';
+import { CrawlerModule } from './crawler/crawler.module.js';
 import { MediaModule } from './media/media.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { StorageModule } from './storage/storage.module.js';
@@ -45,6 +46,7 @@ import { VoicesModule } from './voices/voices.module.js';
     AuthModule,
     ProjectsModule,
     MediaModule,
+    CrawlerModule,
     TtsModule,
     RendersModule,
     ToursModule,

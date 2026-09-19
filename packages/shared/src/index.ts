@@ -5,3 +5,4 @@ export * from "./build-config.js";
 export * from "./tour.js";
 export * from "./speech.js";
 export * from "./variation.js";
+export * from "./product.js";

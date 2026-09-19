@@ -18,6 +18,7 @@ import {
   SUBTITLE_PRESETS,
   type AspectRatio,
   type FrameLayout,
+  type ProductInfo,
   type SubtitleStyle,
 } from "@repo/shared";
 import {
@@ -32,6 +33,7 @@ import {
   type TtsQuota,
 } from "@/lib/studio/projects-api";
 import { useVoicePreview } from "@/lib/studio/use-voice-preview";
+import { ProductSection } from "./product-section";
 
 export type PanelTab = "content" | "subtitle" | "voice";
 
@@ -68,6 +70,10 @@ export function SubtitlePanel({
   duration,
   subtitle,
   busy,
+  importing,
+  onProductChange,
+  onProductCommit,
+  onReimport,
   onDurationChange,
   onApplyTemplate,
   onLineTextChange,
@@ -99,6 +105,11 @@ export function SubtitlePanel({
   duration: number;
   subtitle: Partial<SubtitleStyle>;
   busy: boolean;
+  /** Đang đọc lại link sản phẩm. */
+  importing: boolean;
+  onProductChange: (patch: Partial<ProductInfo>) => void;
+  onProductCommit: (product: Partial<ProductInfo>) => void;
+  onReimport: () => void;
   onDurationChange: (value: number) => void;
   onApplyTemplate: (code: string) => void;
   onLineTextChange: (value: string) => void;
@@ -162,6 +173,10 @@ export function SubtitlePanel({
             templates={templates}
             duration={duration}
             busy={busy}
+            importing={importing}
+            onProductChange={onProductChange}
+            onProductCommit={onProductCommit}
+            onReimport={onReimport}
             fileRef={fileRef}
             onDurationChange={onDurationChange}
             onApplyTemplate={onApplyTemplate}
@@ -235,6 +250,10 @@ function ContentTab({
   templates,
   duration,
   busy,
+  importing,
+  onProductChange,
+  onProductCommit,
+  onReimport,
   fileRef,
   onDurationChange,
   onApplyTemplate,
@@ -251,6 +270,10 @@ function ContentTab({
   templates: ScriptTemplateOption[];
   duration: number;
   busy: boolean;
+  importing: boolean;
+  onProductChange: (patch: Partial<ProductInfo>) => void;
+  onProductCommit: (product: Partial<ProductInfo>) => void;
+  onReimport: () => void;
   fileRef: React.RefObject<HTMLInputElement | null>;
   onDurationChange: (value: number) => void;
   onApplyTemplate: (code: string) => void;
@@ -275,6 +298,18 @@ function ContentTab({
 
   return (
     <>
+      <Section title="Sản phẩm">
+        <ProductSection
+          project={project}
+          hasImages={assets.length > 0}
+          busy={busy}
+          importing={importing}
+          onChange={onProductChange}
+          onCommit={onProductCommit}
+          onReimport={onReimport}
+        />
+      </Section>
+
       <Section title="Mẫu kịch bản">
         <div className="mb-2 flex flex-wrap gap-1.5">
           {DURATION_OPTIONS.map((option) => (

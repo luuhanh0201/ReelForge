@@ -17,6 +17,7 @@ import {
   fetchScriptTemplates,
   fetchVoiceClips,
   fetchVoices,
+  importProductLink,
   MAX_LINES,
   removeLine,
   reorderLines,
@@ -124,6 +125,7 @@ function StudioEditor() {
   const [voiceClips, setVoiceClips] = useState<VoiceClipView[]>([]);
   const [quota, setQuota] = useState<TtsQuota | null>(null);
   const [synthesizing, setSynthesizing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
 
   /**
@@ -577,6 +579,41 @@ function StudioEditor() {
     setProject({ ...project, lines: next });
   };
 
+  /**
+   * Đọc lại link sản phẩm. Không ghi đè những trường người dùng đã sửa — máy chủ chỉ điền
+   * vào chỗ còn trống.
+   *
+   * Không đi qua `run`: sản phẩm không nằm trong ảnh chụp hoàn tác, và kết quả cần tải lại
+   * cả thư viện ảnh chứ không chỉ dự án.
+   */
+  const handleReimport = async () => {
+    setImporting(true);
+    setSaveState("saving");
+
+    try {
+      const result = await importProductLink(projectId);
+      setProject(result.project);
+      setAssets(await fetchAssets(projectId));
+      setSaveState("saved");
+
+      if (result.crawl.status === "failed") {
+        toast("Sàn chưa trả dữ liệu cho link này, bạn điền tay giúp nhé", "warning");
+      } else {
+        toast(
+          result.importedImages > 0
+            ? `Đã đọc lại link · thêm ${result.importedImages} ảnh`
+            : "Đã đọc lại link",
+          "success",
+        );
+      }
+    } catch (cause) {
+      setSaveState("error");
+      setError(cause instanceof Error ? cause.message : "Không đọc được link");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleUpload = async (file: File) => {
     setBusy(true);
     setSaveState("saving");
@@ -769,6 +806,15 @@ function StudioEditor() {
             onLayoutChange={changeLayout}
             onLayoutCommit={commitLayout}
             busy={busy}
+            importing={importing}
+            onProductChange={(patch) =>
+              setProject({ ...project, product: { ...project.product, ...patch } })
+            }
+            onProductCommit={(product) =>
+              // Sản phẩm không nằm trong ảnh chụp hoàn tác, nên không đẩy vào lịch sử.
+              void run(() => updateProject(projectId, { product }), false)
+            }
+            onReimport={() => void handleReimport()}
             onDurationChange={setDuration}
             onApplyTemplate={(code) =>
               void run(() => applyScriptTemplate(projectId, code, duration))

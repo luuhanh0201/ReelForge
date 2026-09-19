@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { Crop, FrameLayouts } from '@repo/shared';
+import type { Crop, FrameLayouts, ProductInfo } from '@repo/shared';
 import { User } from '../auth/user.entity.js';
 
 /** `link` — tạo từ link sản phẩm. `manual` — người dùng tự viết nội dung. */
@@ -99,9 +99,14 @@ export class Project {
   @Column({ name: 'source_url', type: 'varchar', length: 2000, nullable: true })
   sourceUrl!: string | null;
 
-  /** Tên, giá, mô tả sản phẩm — người dùng sửa được mọi trường sau khi lấy về. */
+  /**
+   * Tên, giá, mô tả sản phẩm — người dùng sửa được mọi trường sau khi lấy về.
+   *
+   * `Partial` vì dự án tạo trước khi có `ProductInfoSchema` đang lưu `{}`; đọc qua schema
+   * để có đủ trường mặc định.
+   */
   @Column({ type: 'jsonb', default: () => `'{}'::jsonb` })
-  product!: Record<string, unknown>;
+  product!: Partial<ProductInfo>;
 
   @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
   lines!: ProjectLine[];

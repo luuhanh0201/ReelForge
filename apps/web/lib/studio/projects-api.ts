@@ -1,4 +1,10 @@
-import type { Crop, FrameLayouts, SubtitleStyle } from "@repo/shared";
+import type {
+  Crop,
+  FrameLayouts,
+  ProductCrawl,
+  ProductInfo,
+  SubtitleStyle,
+} from "@repo/shared";
 import { API_BASE_URL, request } from "@/lib/admin/api-client";
 
 export type ProjectMode = "link" | "manual";
@@ -29,7 +35,8 @@ export interface Project {
   aspectRatio: AspectRatio;
   resolution: Resolution;
   sourceUrl: string | null;
-  product: { name?: string; price?: string; description?: string };
+  /** Dự án cũ lưu `{}`, nên mọi trường đều có thể vắng — đọc qua `ProductInfoSchema`. */
+  product: Partial<ProductInfo>;
   lines: ProjectLine[];
   scriptTemplate: string | null;
   /** Rỗng nghĩa là chưa chỉnh gì; `SubtitleStyleSchema` sẽ điền mặc định. */
@@ -113,6 +120,21 @@ export const updateProject = (
   request<Project>(`/projects/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  });
+
+/**
+ * Đọc link sản phẩm và điền vào dự án.
+ *
+ * Đọc hỏng vẫn trả kết quả bình thường với `crawl.status = "failed"` — giao diện mở form
+ * nhập tay thay vì báo lỗi. Chỉ link sai sàn hoặc đọc quá nhanh mới ném lỗi.
+ */
+export const importProductLink = (
+  id: string,
+  input: { url?: string; overwrite?: boolean } = {},
+): Promise<{ project: Project; crawl: ProductCrawl; importedImages: number }> =>
+  request(`/projects/${id}/import-link`, {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 
 export const deleteProject = (id: string): Promise<void> =>

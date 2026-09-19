@@ -15,12 +15,14 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { parseShopLink } from "@repo/shared";
 import { useApp } from "@/lib/app-provider";
 import {
   ASPECT_OPTIONS,
   createProject,
   deleteProject,
   fetchProjects,
+  importProductLink,
   type AspectRatio,
   type Project,
   type ProjectMode,
@@ -75,9 +77,9 @@ const ENTRY_POINTS: EntryPoint[] = [
       "Dán link Shopee, TikTok Shop hoặc Lazada",
       "Paste a Shopee, TikTok Shop or Lazada link",
     ),
-    // Luồng dự kiến: dán link + đặt tên → AI phân tích → người dùng kiểm tra và sửa lần
-    // cuối → xuất. Chưa có `CrawlerModule` nên chưa mở.
-    ready: false,
+    // Luồng: dán link → máy chủ đọc tên, giá, mô tả, ảnh → người dùng kiểm tra và sửa ở
+    // mục Sản phẩm → chọn mẫu kịch bản → lồng tiếng → xuất.
+    ready: true,
   },
   {
     id: "translate",
@@ -116,7 +118,12 @@ function ProjectList() {
   );
   const [creating, setCreating] = useState<ProjectMode | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Đang đọc link — tách khỏi `busy` để nút nói đúng việc đang làm. */
+  const [importing, setImporting] = useState(false);
   const [title, setTitle] = useState("");
+  const [link, setLink] = useState("");
+  /** Lỗi của ô link nằm ngay dưới ô, không phải toast — xem design-system §7.7d. */
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
 
   useEffect(() => {
@@ -168,18 +175,42 @@ function ProjectList() {
     event.preventDefault();
     if (!creating) return;
 
+    const shopLink = creating === "link" ? parseShopLink(link) : null;
+    if (creating === "link" && !shopLink) {
+      setLinkError(
+        t(
+          L(
+            "Link cần bắt đầu bằng https:// và thuộc Shopee, TikTok Shop hoặc Lazada",
+            "The link must start with https:// and come from Shopee, TikTok Shop or Lazada",
+          ),
+        ),
+      );
+      return;
+    }
+
     setBusy(true);
     try {
       const project = await createProject({
         mode: creating,
         title: title.trim() || undefined,
         aspectRatio,
+        sourceUrl: shopLink?.url.href,
       });
+
+      if (shopLink) {
+        setImporting(true);
+        // Đọc hỏng không chặn việc vào phòng dựng: dự án đã có, và mục Sản phẩm ở đó cho
+        // điền tay hoặc đọc lại. Chỉ báo lỗi để người dùng biết vì sao form còn trống.
+        await importProductLink(project.id).catch((cause: unknown) => {
+          setError(cause instanceof Error ? cause.message : "Không đọc được link");
+        });
+      }
 
       router.push(`/studio/${project.id}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Không tạo được dự án");
       setBusy(false);
+      setImporting(false);
     }
   };
 
@@ -211,8 +242,8 @@ function ProjectList() {
             <p className="mt-1 text-sm text-muted">
               {t(
                 L(
-                  "Tự viết nội dung để bắt đầu ngay. Tạo từ link và biên dịch video đang được phát triển.",
-                  "Write your own script to start now. Link import and video translation are in development.",
+                  "Dán link sản phẩm hoặc tự viết nội dung để bắt đầu. Biên dịch video đang được phát triển.",
+                  "Paste a product link or write your own script to start. Video translation is in development.",
                 ),
               )}
             </p>
@@ -281,7 +312,11 @@ function ProjectList() {
               <button
                 key={entry.id}
                 type="button"
-                onClick={() => setCreating("manual")}
+                onClick={() => {
+                  if (entry.id === "translate") return;
+                  setCreating(entry.id);
+                  setLinkError(null);
+                }}
                 className="flex flex-col rounded-card border border-brand/40 bg-brand/[0.06] p-4 text-left transition-colors hover:border-brand"
               >
                 {body}
@@ -298,9 +333,49 @@ function ProjectList() {
             <p className="text-sm font-bold text-ink">{MODE_LABEL[creating]}</p>
 
             <div className="mt-3 flex flex-col gap-3">
+              {creating === "link" ? (
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-xs font-semibold text-muted">
+                    {t(L("Link sản phẩm", "Product link"))}
+                  </span>
+                  <input
+                    value={link}
+                    onChange={(event) => {
+                      setLink(event.target.value);
+                      setLinkError(null);
+                    }}
+                    required
+                    autoFocus
+                    inputMode="url"
+                    placeholder="https://shopee.vn/… · https://shop.tiktok.com/… · https://www.lazada.vn/…"
+                    aria-invalid={linkError ? true : undefined}
+                    aria-describedby={linkError ? "link-error" : undefined}
+                    className={`h-11 rounded-btn border bg-canvas px-3.5 text-sm text-ink outline-none focus:border-brand/50 ${
+                      linkError ? "border-danger/60" : "border-line"
+                    }`}
+                  />
+                  {linkError ? (
+                    <span id="link-error" role="alert" className="text-xs text-danger">
+                      {linkError}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-muted">
+                      {t(
+                        L(
+                          "Máy đọc tên, giá, mô tả và ảnh. Phần nào sàn không trả về, bạn điền tay ở phòng dựng.",
+                          "We read the name, price, description and images. Anything the store hides, you fill in the studio.",
+                        ),
+                      )}
+                    </span>
+                  )}
+                </label>
+              ) : null}
+
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-semibold text-muted">
-                  {t(L("Tên dự án", "Project name"))}
+                  {creating === "link"
+                    ? t(L("Tên dự án (để trống sẽ lấy tên sản phẩm)", "Project name (defaults to the product name)"))
+                    : t(L("Tên dự án", "Project name"))}
                 </span>
                 <input
                   value={title}
@@ -340,7 +415,9 @@ function ProjectList() {
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-btn bg-brand px-5 text-sm font-bold text-[#10151e] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
                 >
                   {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                  {t(L("Tạo dự án", "Create project"))}
+                  {importing
+                    ? t(L("Đang đọc link…", "Reading the link…"))
+                    : t(L("Tạo dự án", "Create project"))}
                 </button>
                 <button
                   type="button"
@@ -369,8 +446,8 @@ function ProjectList() {
               <p className="mt-1 text-xs text-muted">
                 {t(
                   L(
-                    "Bắt đầu bằng lối vào Tự viết nội dung phía trên.",
-                    "Start with \"Write it yourself\" above.",
+                    "Bắt đầu bằng một trong các lối vào phía trên.",
+                    "Start with one of the entry points above.",
                   ),
                 )}
               </p>

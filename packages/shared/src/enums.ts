@@ -15,7 +15,8 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export const PLATFORMS = ["shopee", "tiktok_shop", "lazada", "manual"] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
-export const CRAWL_STATUSES = ["pending", "success", "failed", "manual"] as const;
+/** `partial` — đọc được một phần, người dùng cần điền nốt các trường còn thiếu. */
+export const CRAWL_STATUSES = ["pending", "success", "partial", "failed", "manual"] as const;
 export type CrawlStatus = (typeof CRAWL_STATUSES)[number];
 
 export const SCRIPT_TONES = [

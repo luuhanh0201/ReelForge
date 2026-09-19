@@ -110,6 +110,11 @@ export const ERROR_CODES = {
     status: HttpStatus.BAD_REQUEST,
     message: 'Không đọc được ảnh này, vui lòng chọn ảnh khác',
   },
+  /** Link không phải https hoặc không thuộc sàn hỗ trợ. */
+  LINK_UNSUPPORTED: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Chỉ nhận link sản phẩm Shopee, TikTok Shop hoặc Lazada',
+  },
   INSUFFICIENT_CREDIT: {
     status: HttpStatus.PAYMENT_REQUIRED,
     message: 'Số dư credit không đủ để thực hiện thao tác này',
