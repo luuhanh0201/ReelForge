@@ -1,3 +1,4 @@
+import type { CredentialType } from './credential-registry.js';
 import {
   Check,
   Column,
@@ -27,6 +28,10 @@ export type CredentialStatus = 'connected' | 'disabled' | 'error';
   'chk_provider_credentials_status',
   `"status" IN ('connected', 'disabled', 'error')`,
 )
+@Check(
+  'chk_provider_credentials_type',
+  `"credential_type" IN ('service_account', 'api_key')`,
+)
 export class ProviderCredential {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -54,14 +59,38 @@ export class ProviderCredential {
   @Column({ name: 'credential_fingerprint', type: 'char', length: 64 })
   credentialFingerprint!: string;
 
-  @Column({ name: 'project_id', type: 'varchar', length: 120 })
-  projectId!: string;
+  /**
+   * Hình dạng credential. Quyết định admin tải file hay dán chuỗi, và service đọc payload
+   * đã giải mã theo kiểu nào.
+   */
+  @Column({
+    name: 'credential_type',
+    type: 'varchar',
+    length: 20,
+    default: 'service_account',
+  })
+  credentialType!: CredentialType;
 
-  @Column({ name: 'client_email_masked', type: 'varchar', length: 160 })
-  clientEmailMasked!: string;
+  /**
+   * Chuỗi ngắn để admin nhận ra credential đang lưu (email đã che, hay `AIza…7x2K`).
+   *
+   * Có cột riêng vì ba cột dưới chỉ đúng với service account của Google; nhà cung cấp chỉ
+   * có mỗi API key thì không có project lẫn email nào để hiện.
+   */
+  @Column({ name: 'display_hint', type: 'varchar', length: 160, default: '' })
+  displayHint!: string;
 
-  @Column({ name: 'private_key_id_suffix', type: 'varchar', length: 8 })
-  privateKeyIdSuffix!: string;
+  /** Chỉ service account mới có. */
+  @Column({ name: 'project_id', type: 'varchar', length: 120, nullable: true })
+  projectId!: string | null;
+
+  /** Chỉ service account mới có. */
+  @Column({ name: 'client_email_masked', type: 'varchar', length: 160, nullable: true })
+  clientEmailMasked!: string | null;
+
+  /** Bốn ký tự cuối của khoá — service account là `private_key_id`, api key là chính khoá. */
+  @Column({ name: 'private_key_id_suffix', type: 'varchar', length: 8, nullable: true })
+  privateKeyIdSuffix!: string | null;
 
   @Column({ name: 'status', type: 'varchar', length: 20, default: 'connected' })
   status!: CredentialStatus;

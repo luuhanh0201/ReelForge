@@ -7,6 +7,7 @@ import { ProviderCredentialsModule } from '../provider-credentials/provider-cred
 import { TtsUsageModule } from '../tts-usage/tts-usage.module.js';
 import { Voice } from '../voices/voice.entity.js';
 import { ProjectVoiceController } from './project-voice.controller.js';
+import { ProjectVoiceService } from './project-voice.service.js';
 import { TtsClip } from './tts-clip.entity.js';
 import { TtsService } from './tts.service.js';
 import { UserTtsQuota } from './user-tts-quota.entity.js';
@@ -25,7 +26,7 @@ import { UserTtsQuota } from './user-tts-quota.entity.js';
     ProjectsModule,
   ],
   controllers: [ProjectVoiceController],
-  providers: [TtsService],
-  exports: [TtsService],
+  providers: [TtsService, ProjectVoiceService],
+  exports: [TtsService, ProjectVoiceService],
 })
 export class TtsModule {}

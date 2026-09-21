@@ -21,7 +21,6 @@ import { DEVICE_TYPE_LABEL, describeRelativeTime } from "@/lib/device-label";
 import {
   AdminButton,
   AdminCard,
-  AdminPageHeader,
   DataTable,
   Pill,
   TableCell,
@@ -45,7 +44,13 @@ const DEVICE_ICON = {
  * Trang này là công cụ tự bảo vệ tài khoản quản trị: thấy thiết bị lạ thì đóng ngay,
  * không phải đổi mật khẩu hay nhờ ai khác.
  */
-export default function AdminSessionsPage() {
+/**
+ * Thiết bị đang mở phiên vào **tài khoản quản trị đang đăng nhập**.
+ *
+ * Trước đây là một mục menu riêng, nay là một tab của trang Người dùng: cùng một câu hỏi
+ * "ai đang đăng nhập bằng cái gì", chỉ khác là của mình hay của người khác.
+ */
+export function MySessionsPanel() {
   const toast = useToast();
   const { signOut } = useApp();
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
@@ -128,20 +133,20 @@ export default function AdminSessionsPage() {
 
   return (
     <>
-      <AdminPageHeader
-        title="Thiết bị đăng nhập"
-        description="Các thiết bị đang mở phiên vào tài khoản quản trị của bạn."
-        actions={
-          <AdminButton
-            variant="danger"
-            disabled={busyId !== null || sessions.length === 0}
-            onClick={() => setConfirmAll(true)}
-          >
-            <LogOut size={14} />
-            Đăng xuất mọi nơi
-          </AdminButton>
-        }
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          Các thiết bị đang mở phiên vào tài khoản quản trị của bạn.
+        </p>
+
+        <AdminButton
+          variant="danger"
+          disabled={busyId !== null || sessions.length === 0}
+          onClick={() => setConfirmAll(true)}
+        >
+          <LogOut size={14} />
+          Đăng xuất mọi nơi
+        </AdminButton>
+      </div>
 
       {error ? (
         <AdminCard>

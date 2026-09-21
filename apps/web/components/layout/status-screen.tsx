@@ -53,17 +53,22 @@ export function StatusScreen({
         />
 
         <div className="relative w-full max-w-lg text-center">
-          <span
-            className={`inline-flex h-14 w-14 items-center justify-center rounded-card ${accent.softBg} ${accent.text}`}
-          >
-            <Icon size={26} />
-          </span>
+          {/* Xếp chồng bằng flex-col: để hai `inline-flex` cạnh nhau trong khối canh giữa
+              thì chúng trôi vào **cùng một dòng** và bị căn theo baseline — icon và chip mã
+              lỗi nằm lệch nhau đúng như vậy trước đây. */}
+          <div className="flex flex-col items-center gap-4">
+            <span
+              className={`flex h-14 w-14 items-center justify-center rounded-card ${accent.softBg} ${accent.text}`}
+            >
+              <Icon size={26} />
+            </span>
 
-          <span
-            className={`mt-6 inline-flex items-center rounded-btn border ${accent.border} ${accent.softBg} px-3 py-1 text-[11px] font-semibold tracking-[0.16em] ${accent.text}`}
-          >
-            {status.code} · {t(status.eyebrow)}
-          </span>
+            <span
+              className={`inline-flex items-center rounded-btn border ${accent.border} ${accent.softBg} px-3 py-1 text-[11px] font-semibold tracking-[0.16em] ${accent.text}`}
+            >
+              {status.code} · {t(status.eyebrow)}
+            </span>
+          </div>
 
           <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-ink sm:text-4xl">
             {t(title ?? status.title)}

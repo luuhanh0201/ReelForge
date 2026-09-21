@@ -1,22 +1,13 @@
 import {
-  Compass,
   Cpu,
-  Image,
+  Sparkles,
+  Compass,
   LayoutTemplate,
-  Mic,
-  Palette,
-  PenLine,
-  FileSliders,
-  KeyRound,
   LayoutDashboard,
-  MonitorSmartphone,
-  Mic2,
   Receipt,
   ScrollText,
   Settings,
-  Shuffle,
   Users,
-  Clapperboard,
   Database,
   HardDrive,
   type LucideIcon,
@@ -35,20 +26,34 @@ export interface AdminNavItem {
 
 export interface AdminNavGroup {
   id: string;
-  title: string;
+  /** Vắng mặt = nhóm không có tiêu đề (và vì thế không thu gọn được). */
+  title?: string;
   items: AdminNavItem[];
   /** Nhóm chạy bằng AI — được tô nhấn trong sidebar để phân biệt với nhóm vận hành. */
   aiPowered?: boolean;
   /** Huy hiệu nhỏ cạnh tiêu đề nhóm. */
   badge?: string;
+  /** Dính đáy sidebar — dành cho mục vào hiếm như Cài đặt. */
+  pinBottom?: boolean;
 }
 
 export const ADMIN_BASE_PATH = "/admin";
 
+/**
+ * Menu admin, xếp theo **tần suất dùng thật**: vận hành hằng ngày trước, nội dung ở giữa,
+ * hạ tầng sau, cài đặt dính đáy.
+ *
+ * Nhóm một mục thì bỏ tiêu đề — trước đây 5 tiêu đề cho 14 mục, trong đó hai nhóm đầu mỗi
+ * nhóm đúng một mục, nên tiêu đề gần nhiều bằng nội dung. Ngoại lệ là nhóm AI: tiêu đề ở đó
+ * mang phần tô nhấn, cố ý giữ.
+ *
+ * **Badge phải là số thật.** Số "12 giao dịch" và "3 job Redis" trước đây là hằng số trong
+ * config, nhìn vào tưởng có việc đang chờ xử lý — đã gỡ. Chỉ còn badge người dùng, do
+ * `/admin/users/stats` trả về.
+ */
 export const ADMIN_NAV: AdminNavGroup[] = [
   {
     id: "overview",
-    title: "Tổng quan hệ thống",
     items: [
       {
         id: "overview",
@@ -60,66 +65,45 @@ export const ADMIN_NAV: AdminNavGroup[] = [
   },
   {
     id: "ai",
-    title: "Hệ thống AI & Quy trình xử lý",
+    title: "Hệ thống AI",
     aiPowered: true,
     items: [
       {
-        id: "video-models",
-        label: "AI Video Models",
-        href: "/admin/video-models",
-        icon: Clapperboard,
-        badge: "Sắp ra mắt",
-        comingSoon: true,
-      },
-      {
-        id: "voice-models",
-        label: "AI Voice & TTS",
-        href: "/admin/voice-models",
-        icon: Mic2,
-      },
-      {
-        id: "script-models",
-        label: "AI Script & Hook",
-        href: "/admin/script-models",
-        icon: FileSliders,
-        badge: "4",
-      },
-      {
-        id: "orchestrator",
-        label: "Điều phối & Phân luồng",
-        href: "/admin/orchestrator",
-        icon: Shuffle,
+        id: "ai",
+        label: "AI & Model",
+        href: "/admin/ai",
+        icon: Sparkles,
       },
     ],
   },
   {
-    id: "landing_cms",
-    title: "Quản trị Landing Page",
+    id: "operate",
+    title: "Vận hành",
+    items: [
+      {
+        id: "users",
+        label: "Người dùng & Thiết bị",
+        href: "/admin/users",
+        icon: Users,
+      },
+      {
+        id: "transactions",
+        label: "Giao dịch & Đối soát",
+        href: "/admin/transactions",
+        icon: Receipt,
+      },
+    ],
+  },
+  {
+    id: "content",
+    title: "Nội dung",
     badge: "CMS Live",
     items: [
       {
-        id: "landing-cms",
-        label: "CMS & Tùy biến chung",
-        href: "/admin/landing-cms",
+        id: "landing",
+        label: "Landing Page",
+        href: "/admin/landing",
         icon: LayoutTemplate,
-      },
-      {
-        id: "landing-voice",
-        label: "Cấu hình giọng Voice",
-        href: "/admin/landing-voice",
-        icon: Mic,
-      },
-      {
-        id: "landing-theme",
-        label: "Màu sắc & Branding",
-        href: "/admin/landing-theme",
-        icon: Palette,
-      },
-      {
-        id: "landing-content",
-        label: "Nội dung, Hero & Tiêu đề",
-        href: "/admin/landing-content",
-        icon: PenLine,
       },
       {
         id: "tours",
@@ -127,37 +111,11 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         href: "/admin/tours",
         icon: Compass,
       },
-      {
-        id: "landing-showcase",
-        label: "Video mẫu & Showcase",
-        href: "/admin/landing-showcase",
-        icon: Image,
-      },
-    ],
-  },
-  {
-    id: "accounts",
-    title: "Tài khoản & Thanh toán",
-    items: [
-      {
-        id: "users",
-        label: "Quản trị người dùng",
-        href: "/admin/users",
-        icon: Users,
-        // Không đặt badge cứng ở đây: AdminShell điền số tài khoản thật lúc chạy.
-      },
-      {
-        id: "transactions",
-        label: "Giao dịch & Đối soát",
-        href: "/admin/transactions",
-        icon: Receipt,
-        badge: "12",
-      },
     ],
   },
   {
     id: "infra",
-    title: "Hạ tầng & Kiểm toán",
+    title: "Hạ tầng",
     items: [
       {
         id: "database",
@@ -170,19 +128,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         label: "Redis & Hàng đợi",
         href: "/admin/redis",
         icon: HardDrive,
-        badge: "3",
-      },
-      {
-        id: "api-keys",
-        label: "API Keys & Webhooks",
-        href: "/admin/api-keys",
-        icon: KeyRound,
-      },
-      {
-        id: "sessions",
-        label: "Thiết bị đăng nhập",
-        href: "/admin/sessions",
-        icon: MonitorSmartphone,
       },
       {
         id: "logs",
@@ -190,6 +135,12 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         href: "/admin/logs",
         icon: ScrollText,
       },
+    ],
+  },
+  {
+    id: "settings",
+    pinBottom: true,
+    items: [
       {
         id: "settings",
         label: "Cài đặt chung",

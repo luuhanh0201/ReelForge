@@ -13,6 +13,7 @@ import { AppService } from './app.service.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { configuration } from './config/configuration.js';
 import { CreditsModule } from './credits/credits.module.js';
+import { AutobuildModule } from './autobuild/autobuild.module.js';
 import { CrawlerModule } from './crawler/crawler.module.js';
 import { MediaModule } from './media/media.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
@@ -47,6 +48,7 @@ import { VoicesModule } from './voices/voices.module.js';
     ProjectsModule,
     MediaModule,
     CrawlerModule,
+    AutobuildModule,
     TtsModule,
     RendersModule,
     ToursModule,

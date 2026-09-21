@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  ChevronDown,
   Loader2,
   LogOut,
   Menu,
@@ -12,12 +13,18 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ROLE_LABEL } from "@/config/admin/accounts.config";
 import { ADMIN_BRAND, ADMIN_NAV } from "@/config/admin/nav.config";
 import { useApp } from "@/lib/app-provider";
 import { isStaff, USER_HOME } from "@/lib/auth-api";
 import { fetchAdminUserStats } from "@/lib/admin/users-api";
+import {
+  getCollapsedGroups,
+  getServerCollapsedGroups,
+  subscribeToCollapsedGroups,
+  toggleGroupCollapsed,
+} from "@/lib/admin/nav-collapse";
 import { L } from "@/lib/i18n";
 import { AdminInput } from "@/components/admin/primitives";
 import { ToastProvider } from "@/components/ui/toast";
@@ -31,6 +38,12 @@ import { StatusScreen } from "@/components/layout/status-screen";
 export function AdminShell({ children }: { children: ReactNode }) {
   const { theme, toggleTheme, user, authLoading, openAuth, signOut } = useApp();
   const pathname = usePathname();
+  /** Nhóm menu đang thu gọn, nhớ qua các lần mở trang. */
+  const collapsed = useSyncExternalStore(
+    subscribeToCollapsedGroups,
+    getCollapsedGroups,
+    getServerCollapsedGroups,
+  );
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -127,30 +140,53 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {ADMIN_NAV.map((group) => (
+      <nav className="flex flex-1 flex-col overflow-y-auto px-3 py-4">
+        {ADMIN_NAV.map((group) => {
+          const hasActive = group.items.some(
+            (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+          );
+          // Nhóm chứa trang đang mở thì luôn bung ra: thu gọn mất chỗ mình đang đứng là
+          // kiểu "gọn" khiến người dùng phải đi tìm lại.
+          const open = hasActive || !collapsed.includes(group.id);
+
+          return (
           <div
             key={group.id}
-            className={`mb-5 last:mb-0 ${
+            className={`mb-5 last:mb-0 ${group.pinBottom ? "mt-auto pt-2" : ""} ${
               group.aiPowered ? "rounded-card border border-brand/25 bg-brand/[0.06] p-2" : ""
             }`}
           >
-            <p
-              className={`flex flex-wrap items-center gap-1.5 px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.1em] ${
-                group.aiPowered ? "text-brand" : "text-muted"
-              }`}
-            >
-              {group.title}
+            {group.title ? (
+              <button
+                type="button"
+                onClick={() => toggleGroupCollapsed(group.id)}
+                aria-expanded={open}
+                // Nhóm đang chứa trang mở thì khoá nút lại: cho bấm mà không có gì xảy ra
+                // còn khó hiểu hơn là không cho bấm.
+                disabled={hasActive}
+                title={hasActive ? "Nhóm đang chứa trang bạn mở" : undefined}
+                className={`flex w-full flex-wrap items-center gap-1.5 rounded-btn px-2 pb-2 pt-1 text-left text-[10px] font-bold uppercase tracking-[0.1em] transition-colors disabled:cursor-default ${
+                  group.aiPowered ? "text-brand" : "text-muted"
+                } ${hasActive ? "" : "hover:text-ink"}`}
+              >
+                <ChevronDown
+                  size={12}
+                  className={`shrink-0 transition-transform ${open ? "" : "-rotate-90"} ${
+                    hasActive ? "opacity-40" : ""
+                  }`}
+                />
+                {group.title}
 
-              {/* Huy hiệu nhóm, ví dụ "CMS Live" của nhóm Landing Page. */}
-              {group.badge ? (
-                <span className="shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[9px] font-bold text-[#10151e]">
-                  {group.badge}
-                </span>
-              ) : null}
-            </p>
+                {/* Huy hiệu nhóm, ví dụ "CMS Live" của nhóm Landing Page. */}
+                {group.badge ? (
+                  <span className="shrink-0 rounded-full bg-brand px-1.5 py-0.5 text-[9px] font-bold text-[#10151e]">
+                    {group.badge}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
 
-            <ul className="flex flex-col gap-0.5">
+            <ul className={`flex flex-col gap-0.5 ${open ? "" : "hidden"}`}>
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href;
@@ -197,7 +233,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
               })}
             </ul>
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Danh tính người đang đăng nhập — lấy thẳng từ phiên, không phải chỗ nào khác. */}

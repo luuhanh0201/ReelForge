@@ -6,6 +6,8 @@ import { BusinessException } from '../common/exceptions/business.exception.js';
 import { AesGcmEncryptionService } from '../common/security/aes-gcm-encryption.service.js';
 import type { AuditLogService } from '../audit/audit-log.service.js';
 import type { GoogleTtsCredentialVerifierService } from './google-tts-credential-verifier.service.js';
+import { GeminiCredentialSpec } from './gemini.credential.js';
+import { GoogleTtsCredentialSpec } from './google-tts.credential.js';
 import { ProviderCredential } from './provider-credential.entity.js';
 import { ProviderCredentialsService } from './provider-credentials.service.js';
 
@@ -44,6 +46,11 @@ const build = () => {
 
   const verify = vi.fn().mockResolvedValue({ latencyMs: 120, voiceCount: 28 });
   const verifier = { verify } as unknown as GoogleTtsCredentialVerifierService;
+  const googleTts = new GoogleTtsCredentialSpec(verifier);
+
+  const verifyGemini = vi.fn().mockResolvedValue({ latencyMs: 90, metadata: { modelCount: 12 } });
+  const gemini = new GeminiCredentialSpec();
+  gemini.verify = verifyGemini;
 
   const record = vi.fn().mockResolvedValue(undefined);
   const auditLogs = { record } as unknown as AuditLogService;
@@ -52,11 +59,11 @@ const build = () => {
     repository,
     dataSource,
     encryption,
-    verifier,
+    [googleTts, gemini],
     auditLogs,
   );
 
-  return { service, repository, save, verify, audit: record };
+  return { service, repository, save, verify, verifyGemini, audit: record };
 };
 
 describe('ProviderCredentialsService.upload', () => {
@@ -67,11 +74,19 @@ describe('ProviderCredentialsService.upload', () => {
   });
 
   it('lưu credential và chỉ trả về metadata đã che', async () => {
-    const view = await context.service.upload(serviceAccountFile, '127.0.0.1');
+    const view = await context.service.upload(
+      'google-tts',
+      { file: serviceAccountFile },
+      '127.0.0.1',
+    );
 
     expect(view).toEqual({
       provider: 'google-tts',
+      label: 'Google Cloud TTS',
+      type: 'service_account',
+      docsUrl: expect.any(String) as unknown as string,
       configured: true,
+      displayHint: 'ree***@***.iam.gserviceaccount.com',
       projectId: 'reelforge-dev',
       clientEmailMasked: 'ree***@***.iam.gserviceaccount.com',
       privateKeyIdSuffix: 'a91f',
@@ -88,7 +103,7 @@ describe('ProviderCredentialsService.upload', () => {
   });
 
   it('payload trong database là ciphertext, giải mã lại đúng bản gốc', async () => {
-    await context.service.upload(serviceAccountFile, null);
+    await context.service.upload('google-tts', { file: serviceAccountFile }, null);
 
     const saved = context.save.mock.calls[0]![0];
     expect(saved.encryptedPayload.toString('utf8')).not.toContain('BEGIN PRIVATE KEY');
@@ -115,15 +130,15 @@ describe('ProviderCredentialsService.upload', () => {
   it('Google từ chối thì KHÔNG ghi database', async () => {
     context.verify.mockRejectedValueOnce(new BusinessException('GOOGLE_TTS_AUTH_FAILED'));
 
-    await expect(context.service.upload(serviceAccountFile, null)).rejects.toMatchObject({
-      code: 'GOOGLE_TTS_AUTH_FAILED',
-    });
+    await expect(
+      context.service.upload('google-tts', { file: serviceAccountFile }, null),
+    ).rejects.toMatchObject({ code: 'GOOGLE_TTS_AUTH_FAILED' });
     expect(context.save).not.toHaveBeenCalled();
   });
 
   it('file hỏng thì dừng trước khi gọi Google', async () => {
     await expect(
-      context.service.upload(Buffer.from('{khong-phai-json', 'utf8'), null),
+      context.service.upload('google-tts', { file: Buffer.from('{khong-phai-json', 'utf8') }, null),
     ).rejects.toMatchObject({ code: 'INVALID_SERVICE_ACCOUNT' });
 
     expect(context.verify).not.toHaveBeenCalled();
@@ -131,7 +146,7 @@ describe('ProviderCredentialsService.upload', () => {
   });
 
   it('nhật ký kiểm toán không chứa bí mật', async () => {
-    await context.service.upload(serviceAccountFile, '127.0.0.1');
+    await context.service.upload('google-tts', { file: serviceAccountFile }, '127.0.0.1');
 
     const entry = JSON.stringify(context.audit.mock.calls[0]![0]);
     expect(entry).not.toContain('BEGIN PRIVATE KEY');
@@ -142,9 +157,9 @@ describe('ProviderCredentialsService.upload', () => {
   it('ghi database hỏng thì lỗi nổi lên, credential cũ không bị đụng', async () => {
     context.save.mockRejectedValueOnce(new Error('connection reset'));
 
-    await expect(context.service.upload(serviceAccountFile, null)).rejects.toThrow(
-      'connection reset',
-    );
+    await expect(
+      context.service.upload('google-tts', { file: serviceAccountFile }, null),
+    ).rejects.toThrow('connection reset');
   });
 });
 
@@ -155,5 +170,67 @@ describe('ProviderCredentialsService.getStatus', () => {
 
     expect(view.configured).toBe(false);
     expect(view.projectId).toBeNull();
+  });
+});
+
+describe('ProviderCredentialsService — nhà cung cấp dùng API key', () => {
+  const KEY = 'AIzaSyB1234567890abcdefghijklmnopqrstu';
+
+  it('lưu khoá dưới dạng ciphertext và chỉ trả về gợi ý đã che', async () => {
+    const context = build();
+
+    const view = await context.service.upload('google-gemini', { value: `  ${KEY}  ` }, null);
+
+    expect(view).toMatchObject({
+      provider: 'google-gemini',
+      type: 'api_key',
+      configured: true,
+      displayHint: 'AIza…rstu',
+      projectId: null,
+      clientEmailMasked: null,
+    });
+    expect(JSON.stringify(view)).not.toContain(KEY);
+
+    const saved = context.save.mock.calls[0]![0];
+    expect(saved.credentialType).toBe('api_key');
+    expect(saved.encryptedPayload.toString('utf8')).not.toContain(KEY);
+    expect(JSON.stringify(context.audit.mock.calls[0]![0])).not.toContain(KEY);
+  });
+
+  it('khoá sai hình dạng thì dừng trước khi gọi nhà cung cấp', async () => {
+    const context = build();
+
+    await expect(
+      context.service.upload('google-gemini', { value: 'khong-phai-khoa' }, null),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    expect(context.verifyGemini).not.toHaveBeenCalled();
+    expect(context.save).not.toHaveBeenCalled();
+  });
+
+  it('thiếu khoá cũng bị từ chối, không ghi gì', async () => {
+    const context = build();
+
+    await expect(
+      context.service.upload('google-gemini', {}, null),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(context.save).not.toHaveBeenCalled();
+  });
+
+  it('mã provider lạ thì báo không tìm thấy', async () => {
+    const context = build();
+
+    await expect(
+      context.service.upload('nha-cung-cap-ma', { value: KEY }, null),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('liệt kê đủ nhà cung cấp kèm trạng thái chưa cấu hình', async () => {
+    const { service } = build();
+
+    const items = await service.listStatuses();
+
+    expect(items.map((item) => item.provider)).toEqual(['google-tts', 'google-gemini']);
+    expect(items.every((item) => !item.configured)).toBe(true);
   });
 });

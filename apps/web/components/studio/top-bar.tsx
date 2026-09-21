@@ -19,6 +19,7 @@ import {
   Subtitles,
   TriangleAlert,
   Undo2,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -50,7 +51,7 @@ const AI_TOOLS: {
   label: string;
   hint: string;
   ready: boolean;
-  action?: "voice" | "subtitle";
+  action?: "voice" | "subtitle" | "autobuild";
 }[] = [
   {
     icon: Mic,
@@ -65,6 +66,13 @@ const AI_TOOLS: {
     hint: "Phụ đề karaoke đã tự khớp theo lời thoại",
     ready: true,
     action: "subtitle",
+  },
+  {
+    icon: Wand2,
+    label: "Dựng tự động cả video",
+    hint: "Viết kịch bản, gán hình, lồng tiếng — bạn chỉ kiểm tra lại",
+    ready: true,
+    action: "autobuild",
   },
   {
     icon: Sparkles,
@@ -116,6 +124,7 @@ export function TopBar({
   onExport,
   onRunVoice,
   onOpenSubtitle,
+  onAutobuild,
   exporting,
   exportPercent,
   exportStage,
@@ -136,6 +145,7 @@ export function TopBar({
   onExport: () => void;
   onRunVoice: () => void;
   onOpenSubtitle: () => void;
+  onAutobuild: () => void;
   exporting: boolean;
   exportPercent: number;
   exportStage: string | null;
@@ -291,6 +301,10 @@ export function TopBar({
                 onRunVoice={() => {
                   setMenu(null);
                   onRunVoice();
+                }}
+                onAutobuild={() => {
+                  setMenu(null);
+                  onAutobuild();
                 }}
                 onOpenSubtitle={() => {
                   setMenu(null);
@@ -479,10 +493,18 @@ function Popover({
 function AiMenu({
   onRunVoice,
   onOpenSubtitle,
+  onAutobuild,
 }: {
   onRunVoice: () => void;
   onOpenSubtitle: () => void;
+  onAutobuild: () => void;
 }) {
+  const run: Record<string, () => void> = {
+    voice: onRunVoice,
+    subtitle: onOpenSubtitle,
+    autobuild: onAutobuild,
+  };
+
   return (
     <ul className="flex flex-col gap-0.5">
       {AI_TOOLS.map((tool) => {
@@ -505,7 +527,7 @@ function AiMenu({
             {tool.ready ? (
               <button
                 type="button"
-                onClick={tool.action === "voice" ? onRunVoice : onOpenSubtitle}
+                onClick={run[tool.action ?? ""]}
                 className="flex w-full items-center gap-2.5 rounded-btn px-2.5 py-2 text-left transition-colors hover:bg-subtle"
               >
                 {body}

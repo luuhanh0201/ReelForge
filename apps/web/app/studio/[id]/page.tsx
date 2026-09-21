@@ -2,7 +2,7 @@
 
 import { Loader2, MonitorSmartphone } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ImageMap } from "@repo/render-core";
 import { LAYOUTS, type Crop, type FrameLayout, type FrameLayouts, type SubtitleStyle } from "@repo/shared";
@@ -17,6 +17,7 @@ import {
   fetchScriptTemplates,
   fetchVoiceClips,
   fetchVoices,
+  autobuildProject,
   importProductLink,
   MAX_LINES,
   removeLine,
@@ -28,6 +29,7 @@ import {
   uploadAsset,
   type AspectRatio,
   type MediaAssetView,
+  type AutobuildStepReport,
   type Project,
   type ProjectLine,
   type ScriptTemplateOption,
@@ -46,6 +48,7 @@ import { StatusScreen } from "@/components/layout/status-screen";
 import { ScenePanel } from "@/components/studio/scene-panel";
 import { Stage } from "@/components/studio/stage";
 import { SubtitlePanel, type PanelTab } from "@/components/studio/subtitle-panel";
+import { AutobuildOverlay } from "@/components/studio/autobuild-overlay";
 import { Timeline } from "@/components/studio/timeline";
 import { TopBar, type SaveState } from "@/components/studio/top-bar";
 import { TourProvider } from "@/components/tour/tour-provider";
@@ -116,6 +119,8 @@ export default function StudioEditorPage() {
 function StudioEditor() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, authLoading, openAuth, refreshUser } = useApp();
 
   const [project, setProject] = useState<Project | null>(null);
@@ -126,6 +131,10 @@ function StudioEditor() {
   const [quota, setQuota] = useState<TtsQuota | null>(null);
   const [synthesizing, setSynthesizing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [autobuilding, setAutobuilding] = useState(false);
+  const [autobuildSteps, setAutobuildSteps] = useState<AutobuildStepReport[] | null>(null);
+  /** Đã khởi động lần dựng tự động hay chưa — chống chạy hai lần trong cùng một phiên mở. */
+  const autobuildStarted = useRef(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
 
   /**
@@ -185,6 +194,52 @@ function StudioEditor() {
     [toast],
   );
 
+  /**
+   * Dựng tự động cả video: đọc link, viết kịch bản, gán hình, chọn giọng, lồng tiếng.
+   *
+   * Máy chủ chạy cả chuỗi trong một lệnh gọi và **không bao giờ ném lỗi giữa chừng** — bước
+   * hỏng chỉ là một dòng trong `steps`. Vì vậy chỗ này không bắt lỗi từng bước, chỉ bắt lỗi
+   * mạng và lỗi quyền.
+   *
+   * Mọi bước trót lọt thì đóng lớp phủ luôn; có bước cần người dùng xử lý thì giữ lại để họ
+   * đọc, vì một toast hai giây sẽ tắt trước khi họ kịp hiểu phải làm gì.
+   */
+  const runAutobuild = useCallback(async () => {
+    setAutobuilding(true);
+    setAutobuildSteps(null);
+    setSaveState("saving");
+
+    try {
+      const result = await autobuildProject(projectId);
+      setProject(result.project);
+      setAutobuildSteps(result.steps);
+      setDuration(Math.max(30, result.project.lines.length * 10 || 30));
+
+      const [loadedAssets, voice] = await Promise.all([
+        fetchAssets(projectId),
+        fetchVoiceClips(projectId),
+      ]);
+      setAssets(loadedAssets);
+      setVoiceClips(voice.items);
+      setQuota(voice.quota);
+      setSaveState("saved");
+
+      const needsAttention = result.steps.some((item) => item.needsUser);
+
+      if (!needsAttention) {
+        setAutobuildSteps(null);
+        toast("Đã dựng xong, bạn xem lại rồi bấm Xuất MP4", "success");
+      }
+    } catch (cause) {
+      setSaveState("error");
+      setAutobuildSteps(null);
+      setError(cause instanceof Error ? cause.message : "Không dựng được video");
+    } finally {
+      setAutobuilding(false);
+    }
+  }, [projectId, setError, toast]);
+
+
   const history = useHistory<Snapshot>();
   /**
    * Bản dự án của lần render đã commit gần nhất, để `snapshot()` đọc được mà không phải
@@ -221,6 +276,15 @@ function StudioEditor() {
         setVoiceClips(voice.items);
         setQuota(voice.quota);
         setDuration(Math.max(30, loadedProject.lines.length * 10 || 30));
+
+        // Vào từ màn hình tạo dự án (`?autobuild=1`) thì dựng luôn, đúng một lần. Tham số
+        // được xoá khỏi URL trước khi chạy: tải lại trang giữa chừng mà dựng lại từ đầu thì
+        // vừa tốn hạn mức lồng tiếng vừa ghi đè thứ người dùng đang sửa.
+        if (searchParams.get("autobuild") === "1" && !autobuildStarted.current) {
+          autobuildStarted.current = true;
+          router.replace(`/studio/${projectId}`, { scroll: false });
+          void runAutobuild();
+        }
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
@@ -234,7 +298,7 @@ function StudioEditor() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, user]);
+  }, [projectId, router, runAutobuild, searchParams, user]);
 
   /** Khung cắt của **khổ đang mở**, xếp theo chỉ số cảnh để khung xem trước tra thẳng. */
   const crops = useMemo(
@@ -718,6 +782,7 @@ function StudioEditor() {
           onExport={handleExport}
           onRunVoice={() => void handleSynthesize(false)}
           onOpenSubtitle={() => setTab("subtitle")}
+          onAutobuild={() => void runAutobuild()}
           exporting={exportState.running}
           exportPercent={exportState.percent}
           exportStage={exportState.stage}
@@ -879,6 +944,12 @@ function StudioEditor() {
             onToggleCaption={() => setShowCaption((value) => !value)}
           />
         </main>
+
+        <AutobuildOverlay
+          running={autobuilding}
+          steps={autobuildSteps}
+          onClose={() => setAutobuildSteps(null)}
+        />
       </TourProvider>
     </>
   );

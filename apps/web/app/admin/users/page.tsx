@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Unlock,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ROLE_LABEL } from "@/config/admin/accounts.config";
 import {
@@ -38,6 +39,7 @@ import {
   AdminInput,
   AdminPageHeader,
   AdminSelect,
+  AdminTabs,
   DataTable,
   Pill,
   StatusBadge,
@@ -46,6 +48,7 @@ import {
   TableRow,
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
+import { MySessionsPanel } from "@/components/admin/sessions-panel";
 import { useToast } from "@/components/ui/toast";
 
 type PlanFilter = UserPlan | "all";
@@ -98,7 +101,17 @@ const formatDate = (iso: string | null): string =>
  * Tài khoản chỉ sinh ra qua đăng nhập Google nên **không có nút tạo tay**; đổi lại
  * trang này quản lý được thứ trước đây không nhìn thấy: các thiết bị đang đăng nhập.
  */
+const TABS = [
+  { id: "accounts", label: "Tài khoản" },
+  { id: "devices", label: "Thiết bị của tôi" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
 export default function UsersPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab: TabId = searchParams.get("tab") === "devices" ? "devices" : "accounts";
   const toast = useToast();
   const [users, setUsers] = useState<AdminUserEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -295,150 +308,168 @@ export default function UsersPage() {
         title="Quản trị người dùng"
         description="Tài khoản đăng nhập bằng Google hoặc email, kèm thiết bị đang mở phiên."
         actions={
-          <AdminButton onClick={exportCsv} disabled={filtered.length === 0}>
-            <Download size={14} />
-            Xuất danh sách
-          </AdminButton>
+          tab === "accounts" ? (
+            <AdminButton onClick={exportCsv} disabled={filtered.length === 0}>
+              <Download size={14} />
+              Xuất danh sách
+            </AdminButton>
+          ) : undefined
         }
       />
 
-      {loadError ? (
-        <AdminCard>
-          <p className="text-sm text-ink">{loadError}</p>
-        </AdminCard>
-      ) : null}
+      <AdminTabs
+        items={TABS}
+        active={tab}
+        onSelect={(id) =>
+          router.replace(id === "accounts" ? "/admin/users" : "/admin/users?tab=devices", {
+            scroll: false,
+          })
+        }
+      />
 
-      <AdminCard padded={false}>
-        <div className="flex flex-wrap items-center gap-2 border-b border-line p-4">
-          <AdminInput
-            ariaLabel="Tìm theo tên, email hoặc ID"
-            value={query}
-            onChange={setQuery}
-            placeholder="Tìm tên, email, ID tài khoản..."
-            icon={<Search size={15} className="shrink-0 text-muted" />}
-            className="w-full sm:w-72"
-          />
-          <AdminSelect ariaLabel="Lọc theo gói" value={plan} onChange={setPlan} options={PLAN_OPTIONS} />
-          <AdminSelect
-            ariaLabel="Lọc theo trạng thái"
-            value={status}
-            onChange={setStatus}
-            options={STATUS_OPTIONS}
-          />
-          <p className="ml-auto text-xs text-muted">
-            {loading ? "Đang tải..." : `${filtered.length}/${users.length} tài khoản`}
-          </p>
-        </div>
+      {tab === "devices" ? <MySessionsPanel /> : null}
 
-        <DataTable
-          headers={["Người dùng", "Gói & quyền", "Credits", "Thiết bị", "Đăng nhập", "Thao tác"]}
-          isEmpty={!loading && filtered.length === 0}
-        >
-          {pagination.items.map((user) => (
-            <TableRow key={user.id}>
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-[#10151e]">
-                    {user.name.charAt(0).toUpperCase()}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
-                    <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-                      <span className="truncate">{user.email}</span>
-                      {user.emailVerified ? null : (
-                        <span
-                          title="Chưa xác minh email nên chưa đăng nhập bằng mật khẩu được"
-                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber/15 px-1.5 py-0.5 text-[10px] font-bold text-amber"
-                        >
-                          <MailWarning size={10} />
-                          Chưa xác minh
-                        </span>
-                      )}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] text-muted">
-                      {PROVIDER_LABEL[user.provider]}
-                    </p>
+      {tab === "accounts" ? (
+        <>
+        {loadError ? (
+          <AdminCard>
+            <p className="text-sm text-ink">{loadError}</p>
+          </AdminCard>
+        ) : null}
+
+        <AdminCard padded={false}>
+          <div className="flex flex-wrap items-center gap-2 border-b border-line p-4">
+            <AdminInput
+              ariaLabel="Tìm theo tên, email hoặc ID"
+              value={query}
+              onChange={setQuery}
+              placeholder="Tìm tên, email, ID tài khoản..."
+              icon={<Search size={15} className="shrink-0 text-muted" />}
+              className="w-full sm:w-72"
+            />
+            <AdminSelect ariaLabel="Lọc theo gói" value={plan} onChange={setPlan} options={PLAN_OPTIONS} />
+            <AdminSelect
+              ariaLabel="Lọc theo trạng thái"
+              value={status}
+              onChange={setStatus}
+              options={STATUS_OPTIONS}
+            />
+            <p className="ml-auto text-xs text-muted">
+              {loading ? "Đang tải..." : `${filtered.length}/${users.length} tài khoản`}
+            </p>
+          </div>
+
+          <DataTable
+            headers={["Người dùng", "Gói & quyền", "Credits", "Thiết bị", "Đăng nhập", "Thao tác"]}
+            isEmpty={!loading && filtered.length === 0}
+          >
+            {pagination.items.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-[#10151e]">
+                      {user.name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
+                      <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                        <span className="truncate">{user.email}</span>
+                        {user.emailVerified ? null : (
+                          <span
+                            title="Chưa xác minh email nên chưa đăng nhập bằng mật khẩu được"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber/15 px-1.5 py-0.5 text-[10px] font-bold text-amber"
+                          >
+                            <MailWarning size={10} />
+                            Chưa xác minh
+                          </span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted">
+                        {PROVIDER_LABEL[user.provider]}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </TableCell>
+                </TableCell>
 
-              <TableCell>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Pill accent={PLAN_ACCENT[user.plan]}>
-                    {PLAN_LABEL[user.plan].vi}
-                  </Pill>
-                  <span className="text-xs text-muted">{ROLE_LABEL[user.role]}</span>
-                </div>
-                <StatusBadge
-                  className="mt-1.5"
-                  status={user.status === "active" ? "up" : "down"}
-                  label={user.status === "active" ? "Hoạt động" : "Bị khóa"}
-                />
-              </TableCell>
-
-              <TableCell className="font-mono text-sm font-bold text-ink">
-                {user.credits}
-              </TableCell>
-
-              <TableCell>
-                <button
-                  type="button"
-                  onClick={() => void openSessions(user)}
-                  className="inline-flex items-center gap-1.5 rounded-btn px-1.5 py-1 font-mono text-sm text-ink transition-colors hover:bg-subtle"
-                  title="Xem thiết bị đang đăng nhập"
-                >
-                  <MonitorSmartphone
-                    size={15}
-                    className={user.activeSessions > 0 ? "text-mint" : "text-muted"}
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Pill accent={PLAN_ACCENT[user.plan]}>
+                      {PLAN_LABEL[user.plan].vi}
+                    </Pill>
+                    <span className="text-xs text-muted">{ROLE_LABEL[user.role]}</span>
+                  </div>
+                  <StatusBadge
+                    className="mt-1.5"
+                    status={user.status === "active" ? "up" : "down"}
+                    label={user.status === "active" ? "Hoạt động" : "Bị khóa"}
                   />
-                  {user.activeSessions}
-                </button>
-              </TableCell>
+                </TableCell>
 
-              <TableCell className="whitespace-nowrap font-mono text-xs text-muted">
-                {formatDate(user.lastLoginAt)}
-              </TableCell>
+                <TableCell className="font-mono text-sm font-bold text-ink">
+                  {user.credits}
+                </TableCell>
 
-              <TableCell>
-                <div className="flex items-center gap-1">
-                  <AdminButton
-                    variant="ghost"
-                    className="w-9 px-0"
-                    title="Điều chỉnh credits"
-                    onClick={() => {
-                      setCreditTarget(user);
-                      setCreditAmount("10");
-                    }}
+                <TableCell>
+                  <button
+                    type="button"
+                    onClick={() => void openSessions(user)}
+                    className="inline-flex items-center gap-1.5 rounded-btn px-1.5 py-1 font-mono text-sm text-ink transition-colors hover:bg-subtle"
+                    title="Xem thiết bị đang đăng nhập"
                   >
-                    <Coins size={15} />
-                  </AdminButton>
-                  <AdminButton
-                    variant="ghost"
-                    className="w-9 px-0"
-                    title="Đổi vai trò"
-                    onClick={() => {
-                      setEditTarget(user);
-                      setEditRole(user.role);
-                    }}
-                  >
-                    <Pencil size={15} />
-                  </AdminButton>
-                  <AdminButton
-                    variant="ghost"
-                    className="w-9 px-0"
-                    title="Khóa hoặc mở khóa tài khoản"
-                    onClick={() => setLockTarget(user)}
-                  >
-                    {user.status === "active" ? <Lock size={15} /> : <Unlock size={15} />}
-                  </AdminButton>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </DataTable>
+                    <MonitorSmartphone
+                      size={15}
+                      className={user.activeSessions > 0 ? "text-mint" : "text-muted"}
+                    />
+                    {user.activeSessions}
+                  </button>
+                </TableCell>
 
-        <TablePagination pagination={pagination} unit="người dùng" />
-      </AdminCard>
+                <TableCell className="whitespace-nowrap font-mono text-xs text-muted">
+                  {formatDate(user.lastLoginAt)}
+                </TableCell>
+
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <AdminButton
+                      variant="ghost"
+                      className="w-9 px-0"
+                      title="Điều chỉnh credits"
+                      onClick={() => {
+                        setCreditTarget(user);
+                        setCreditAmount("10");
+                      }}
+                    >
+                      <Coins size={15} />
+                    </AdminButton>
+                    <AdminButton
+                      variant="ghost"
+                      className="w-9 px-0"
+                      title="Đổi vai trò"
+                      onClick={() => {
+                        setEditTarget(user);
+                        setEditRole(user.role);
+                      }}
+                    >
+                      <Pencil size={15} />
+                    </AdminButton>
+                    <AdminButton
+                      variant="ghost"
+                      className="w-9 px-0"
+                      title="Khóa hoặc mở khóa tài khoản"
+                      onClick={() => setLockTarget(user)}
+                    >
+                      {user.status === "active" ? <Lock size={15} /> : <Unlock size={15} />}
+                    </AdminButton>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </DataTable>
+
+          <TablePagination pagination={pagination} unit="người dùng" />
+        </AdminCard>
+        </>
+      ) : null}
 
       <AdminModal
         open={creditTarget !== null}

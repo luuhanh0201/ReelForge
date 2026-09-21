@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useLandingCms } from "@/lib/admin/use-landing-cms";
 import { fetchVoices, type VoiceEntry } from "@/lib/admin/voices-api";
 import { useEffect } from "react";
-import { AdminCard, AdminPageHeader } from "@/components/admin/primitives";
+import { AdminCard, AdminPageHeader, AdminTabs } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
 import { AdminButton } from "@/components/admin/primitives";
 import { useToast } from "@/components/ui/toast";
@@ -16,6 +16,15 @@ import { ThemeSection } from "./theme-section";
 import { VoiceSection } from "./voice-section";
 
 export type CmsTab = "all" | "voice" | "theme" | "content" | "showcase";
+
+/** Nhãn tab, cũng là thứ tự hiển thị. */
+export const CMS_TABS: readonly { id: CmsTab; label: string }[] = [
+  { id: "all", label: "Tất cả" },
+  { id: "content", label: "Nội dung & Hero" },
+  { id: "theme", label: "Màu sắc" },
+  { id: "voice", label: "Giọng đọc" },
+  { id: "showcase", label: "Video mẫu" },
+];
 
 const TITLES: Record<CmsTab, { title: string; description: string }> = {
   all: {
@@ -45,7 +54,13 @@ const TITLES: Record<CmsTab, { title: string; description: string }> = {
  * Khung chung cho cả 5 trang CMS: cùng header, cùng bản nháp, cùng khung xem trước;
  * chỉ khác phần nội dung bên dưới.
  */
-export function LandingCmsPage({ tab }: { tab: CmsTab }) {
+export function LandingCmsPage({
+  tab,
+  onTabChange,
+}: {
+  tab: CmsTab;
+  onTabChange: (tab: CmsTab) => void;
+}) {
   const toast = useToast();
   const cms = useLandingCms();
   const [voices, setVoices] = useState<VoiceEntry[]>([]);
@@ -81,7 +96,9 @@ export function LandingCmsPage({ tab }: { tab: CmsTab }) {
 
   return (
     <>
-      <AdminPageHeader title={meta.title} description={meta.description} />
+      <AdminPageHeader title="Landing Page" description={meta.description} />
+
+      <AdminTabs items={CMS_TABS} active={tab} onSelect={onTabChange} />
 
       <CmsHeader
         cms={cms}

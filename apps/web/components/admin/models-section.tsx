@@ -2,7 +2,7 @@
 
 import {
   BadgeCheck,
-  Gauge,
+  KeyRound,
   Pencil,
   Plus,
   Settings2,
@@ -25,12 +25,17 @@ import {
   AdminButton,
   AdminCard,
   AdminInput,
+  AdminRowMenu,
   AdminSelect,
-  Pill,
   ToggleSwitch,
 } from "@/components/admin/primitives";
 import { AdminModal } from "@/components/admin/admin-modal";
 import { ModelConfigForm } from "@/components/admin/models/model-config-forms";
+import {
+  fetchCredentials,
+  type CredentialStatusView,
+} from "@/lib/admin/credentials-api";
+import { CredentialUploadModal } from "@/components/admin/credentials/credential-upload-modal";
 import {
   createAiModel,
   deleteAiModel,
@@ -42,14 +47,6 @@ import {
   type ModelUsage,
 } from "@/lib/admin/ai-models-api";
 import { useToast } from "@/components/ui/toast";
-
-const BADGE_ACCENT = {
-  "Default Primary": "brand",
-  "Fallback Tier-1": "mint",
-  "Fallback Tier-2": "info",
-  "Enterprise Only": "voice",
-  Experimental: "amber",
-} as const;
 
 /**
  * Lưới thẻ model dùng chung cho cả 3 trang Video / Voice / Script.
@@ -250,11 +247,20 @@ export function ModelsSection({
   const [verifying, setVerifying] = useState<string | null>(null);
   const [usage, setUsage] = useState<Record<string, ModelUsage>>({});
   const [configDraft, setConfigDraft] = useState<ModelConfig | null>(null);
+  /** Trạng thái khoá của các nhà cung cấp, để thẻ model biết bước tiếp theo là gì. */
+  const [credentials, setCredentials] = useState<CredentialStatusView[]>([]);
+  const [keyModal, setKeyModal] = useState<CredentialStatusView | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const list = await fetchAiModels(kind);
+      const [list, keys] = await Promise.all([
+        fetchAiModels(kind),
+        // Lỗi đọc khoá không được làm hỏng danh mục model: thẻ vẫn hiện, chỉ là không biết
+        // trạng thái khoá.
+        fetchCredentials().catch(() => [] as CredentialStatusView[]),
+      ]);
       setModels(list);
+      setCredentials(keys);
       setApiError(null);
 
       // Chỉ model giọng đọc mới đếm ký tự; lỗi ở đây không được làm hỏng cả trang.
@@ -287,6 +293,13 @@ export function ModelsSection({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  /** Model dùng được và model chưa mở, tách hẳn hai nhóm. */
+  const ready = models.filter((model) => model.comingSoon !== true);
+  const locked = models.filter((model) => model.comingSoon === true);
+
+  const credentialOf = (model: AiModel): CredentialStatusView | undefined =>
+    credentials.find((item) => item.provider === model.credentialProvider);
 
   const replace = (saved: AiModel) =>
     setModels((current) => current.map((item) => (item.id === saved.id ? saved : item)));
@@ -466,130 +479,62 @@ export function ModelsSection({
         </AdminCard>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-        {models.map((model) => {
-          const locked = model.comingSoon === true;
-          const verified = model.verifiedAt !== null;
-
-          return (
-            <AdminCard
+      {ready.length > 0 ? (
+        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          {ready.map((model) => (
+            <ModelCard
               key={model.id}
-              className={`flex flex-col ${locked ? "opacity-60" : ""}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-btn border border-line bg-subtle font-display text-sm font-bold text-ink">
-                  {model.vendor.charAt(0)}
-                </span>
+              model={model}
+              usage={usage[model.id]}
+              credential={credentialOf(model)}
+              verifying={verifying === model.id}
+              onVerify={() => void verifyModel(model)}
+              onToggle={() => void toggleModel(model)}
+              onAddKey={() => setKeyModal(credentialOf(model) ?? null)}
+              onEdit={() => openEdit(model)}
+              onConfigure={() => openConfigure(model)}
+              onRemove={() => setRemoveTarget(model)}
+            />
+          ))}
+        </div>
+      ) : null}
 
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-display text-sm font-bold text-ink">
-                    {model.name}
-                  </p>
-                  <p className="truncate text-xs text-muted">{model.vendor}</p>
-                </div>
+      {/* Model chưa mở không đứng ngang hàng với model dùng được: gom xuống cuối, thu gọn,
+          để danh sách phía trên chỉ còn những thứ quản trị viên thao tác được. */}
+      {locked.length > 0 ? (
+        <details className="rounded-card border border-line bg-surface p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-muted">
+            Sắp ra mắt ({locked.length})
+          </summary>
 
-                <AdminButton
-                  variant="ghost"
-                  className="h-9 w-9 shrink-0 px-0"
-                  disabled={locked}
-                  title="Sửa thông tin model"
-                  onClick={() => openEdit(model)}
-                >
-                  <Pencil size={18} />
-                </AdminButton>
+          <ul className="mt-3 flex flex-col gap-2">
+            {locked.map((model) => (
+              <li
+                key={model.id}
+                className="flex flex-wrap items-center gap-2 border-t border-line pt-2 text-sm first:border-0 first:pt-0"
+              >
+                <span className="font-semibold text-ink">{model.name}</span>
+                <span className="text-xs text-muted">{model.vendor}</span>
+                <span className="ml-auto font-mono text-xs text-muted">{model.costLabel}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
-                <AdminButton
-                  variant="ghost"
-                  className="h-9 w-9 shrink-0 px-0"
-                  title="Gỡ model khỏi danh mục"
-                  onClick={() => setRemoveTarget(model)}
-                >
-                  <Trash2 size={18} />
-                </AdminButton>
-
-                <ToggleSwitch
-                  checked={model.enabled}
-                  disabled={locked}
-                  onChange={() => void toggleModel(model)}
-                  label={`Bật tắt ${model.name}`}
-                />
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                <Pill accent={BADGE_ACCENT[model.badge]}>{model.badge}</Pill>
-                {locked ? <Pill accent="info">Sắp ra mắt</Pill> : null}
-              </div>
-
-              <dl className="mt-4 flex flex-col gap-2 border-t border-line pt-4 text-xs">
-                <div className="flex items-center gap-2">
-                  <Timer size={14} className="shrink-0 text-muted" />
-                  <dt className="text-muted">Độ trễ</dt>
-                  <dd className="ml-auto font-mono font-bold text-ink">{model.latency}</dd>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Gauge size={14} className="shrink-0 text-muted" />
-                  <dt className="text-muted">Hỗ trợ</dt>
-                  <dd className="ml-auto font-medium text-ink">{model.capability}</dd>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Wallet size={14} className="shrink-0 text-muted" />
-                  <dt className="text-muted">Chi phí</dt>
-                  <dd className="ml-auto font-mono font-bold text-ink">{model.costLabel}</dd>
-                </div>
-              </dl>
-
-              {usage[model.id] ? (
-                <UsageLine usage={usage[model.id]!} />
-              ) : null}
-
-              {model.credentialProvider ? (
-                <p
-                  className={`mt-3 flex items-start gap-1.5 rounded-btn px-2.5 py-1.5 text-[11px] ${
-                    verified ? "bg-mint/10 text-mint" : "bg-amber/10 text-amber"
-                  }`}
-                >
-                  {verified ? (
-                    <BadgeCheck size={13} className="mt-px shrink-0" />
-                  ) : (
-                    <ShieldAlert size={13} className="mt-px shrink-0" />
-                  )}
-                  <span className="font-mono">
-                    {verified
-                      ? `${model.verificationNote}${
-                          model.lastLatencyMs ? ` · ${model.lastLatencyMs}ms` : ""
-                        }`
-                      : "Chưa được nhà cung cấp xác nhận"}
-                  </span>
-                </p>
-              ) : (
-                <p className="mt-3 rounded-btn bg-subtle px-2.5 py-1.5 font-mono text-[11px] text-muted">
-                  Khai báo thủ công · chưa gắn nhà cung cấp
-                </p>
-              )}
-
-              <div className="mt-4 flex gap-2">
-                <AdminButton
-                  onClick={() => openConfigure(model)}
-                  disabled={locked}
-                  className="flex-1"
-                >
-                  <Settings2 size={14} />
-                  Cấu hình
-                </AdminButton>
-                <AdminButton
-                  variant="primary"
-                  onClick={() => void verifyModel(model)}
-                  disabled={locked || !model.credentialProvider || verifying === model.id}
-                  className="flex-1"
-                >
-                  <BadgeCheck size={14} />
-                  {verifying === model.id ? "Đang gọi..." : "Xác minh"}
-                </AdminButton>
-              </div>
-            </AdminCard>
-          );
-        })}
-      </div>
+      {keyModal ? (
+        <CredentialUploadModal
+          view={keyModal}
+          open
+          onClose={() => setKeyModal(null)}
+          onSaved={(next) => {
+            setCredentials((current) =>
+              current.map((item) => (item.provider === next.provider ? next : item)),
+            );
+            toast(`Đã lưu khoá ${next.label} — giờ bấm Xác minh trên thẻ model`);
+          }}
+        />
+      ) : null}
 
       <AdminModal
         open={configuring !== null}
@@ -689,5 +634,180 @@ export function ModelsSection({
         <ModelInfoForm draft={editDraft} onChange={setEditDraft} />
       </AdminModal>
     </>
+  );
+}
+
+/**
+ * Thẻ một model, với **đúng một hành động chính** tuỳ trạng thái.
+ *
+ * Backend bắt buộc thứ tự: có khoá nhà cung cấp → xác minh → mới bật được. Trước đây giao
+ * diện bày cả năm nút ngang hàng nên quản trị viên hay bấm Bật trước rồi bị từ chối mà
+ * không hiểu vì sao. Nay mỗi lúc chỉ có một nút sáng, đúng bước tiếp theo.
+ *
+ * Sửa · Cấu hình · Gỡ là việc hiếm nên nằm trong menu `⋯`.
+ */
+function ModelCard({
+  model,
+  usage,
+  credential,
+  verifying,
+  onVerify,
+  onToggle,
+  onAddKey,
+  onEdit,
+  onConfigure,
+  onRemove,
+}: {
+  model: AiModel;
+  usage: ModelUsage | undefined;
+  credential: CredentialStatusView | undefined;
+  verifying: boolean;
+  onVerify: () => void;
+  onToggle: () => void;
+  onAddKey: () => void;
+  onEdit: () => void;
+  onConfigure: () => void;
+  onRemove: () => void;
+}) {
+  const verified = model.verifiedAt !== null;
+  const needsKey = model.credentialProvider !== null && credential?.configured !== true;
+
+  return (
+    <AdminCard className="flex flex-col">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-btn border border-line bg-subtle font-display text-sm font-bold text-ink">
+          {model.vendor.charAt(0)}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-sm font-bold text-ink">{model.name}</p>
+          {/* `badge` là nhãn do người nhập tự gõ, không phải định tuyến thật — để chữ
+              thường, không tô màu như một trạng thái hệ thống. */}
+          <p className="truncate text-xs text-muted">
+            {model.vendor} · {model.badge}
+          </p>
+        </div>
+
+        <AdminRowMenu
+          label={`Thao tác khác với ${model.name}`}
+          items={[
+            { label: "Sửa thông tin", icon: <Pencil size={16} />, onClick: onEdit },
+            { label: "Cấu hình tham số", icon: <Settings2 size={16} />, onClick: onConfigure },
+            {
+              label: "Gỡ khỏi danh mục",
+              icon: <Trash2 size={16} />,
+              danger: true,
+              onClick: onRemove,
+            },
+          ]}
+        />
+      </div>
+
+      {/* Dòng trạng thái: model này có đang đi vào sản phẩm hay không. Danh mục liệt kê
+          được bao nhiêu model cũng được, nhưng chỉ cái có giọng dùng tới mới chạy thật. */}
+      <p className="mt-3 text-xs font-semibold text-muted">
+        {model.usedByVoices > 0 ? (
+          <span className="text-mint">Đang dùng cho {model.usedByVoices} giọng</span>
+        ) : model.enabled ? (
+          "Đang bật · chưa có giọng nào dùng"
+        ) : (
+          "Chưa nối vào sản phẩm"
+        )}
+      </p>
+
+      <dl className="mt-3 flex flex-col gap-2 border-t border-line pt-3 text-xs">
+        <div className="flex items-center gap-2">
+          <Timer size={14} className="shrink-0 text-muted" />
+          <dt className="text-muted">Độ trễ</dt>
+          <dd className="ml-auto font-mono font-bold text-ink">{model.latency}</dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <Wallet size={14} className="shrink-0 text-muted" />
+          <dt className="text-muted">Chi phí</dt>
+          <dd className="ml-auto font-mono font-bold text-ink">{model.costLabel}</dd>
+        </div>
+      </dl>
+
+      {usage ? <UsageLine usage={usage} /> : null}
+
+      <ModelStatusLine model={model} credential={credential} needsKey={needsKey} />
+
+      <div className="mt-4 flex items-center gap-2">
+        {needsKey ? (
+          <AdminButton variant="primary" onClick={onAddKey} className="flex-1">
+            <KeyRound size={14} />
+            Dán khoá
+          </AdminButton>
+        ) : !verified && model.credentialProvider ? (
+          <AdminButton
+            variant="primary"
+            onClick={onVerify}
+            disabled={verifying}
+            className="flex-1"
+          >
+            <BadgeCheck size={14} />
+            {verifying ? "Đang gọi..." : "Xác minh"}
+          </AdminButton>
+        ) : (
+          <div className="flex flex-1 items-center gap-2.5">
+            <ToggleSwitch
+              checked={model.enabled}
+              onChange={onToggle}
+              label={`Bật tắt ${model.name}`}
+            />
+            <span className="text-xs text-muted">
+              {model.enabled ? "Đang bật" : "Đang tắt"}
+            </span>
+          </div>
+        )}
+      </div>
+    </AdminCard>
+  );
+}
+
+/** Một dòng nói rõ đang thiếu gì — thay cho hai badge rời rạc trước đây. */
+function ModelStatusLine({
+  model,
+  credential,
+  needsKey,
+}: {
+  model: AiModel;
+  credential: CredentialStatusView | undefined;
+  needsKey: boolean;
+}) {
+  if (!model.credentialProvider) {
+    return (
+      <p className="mt-3 rounded-btn bg-subtle px-2.5 py-1.5 text-[11px] text-muted">
+        Khai báo thủ công · chưa gắn nhà cung cấp nào
+      </p>
+    );
+  }
+
+  if (needsKey) {
+    return (
+      <p className="mt-3 flex items-start gap-1.5 rounded-btn bg-amber/10 px-2.5 py-1.5 text-[11px] text-amber">
+        <ShieldAlert size={13} className="mt-px shrink-0" />
+        <span>Chưa có khoá {credential?.label ?? model.credentialProvider}</span>
+      </p>
+    );
+  }
+
+  if (model.verifiedAt === null) {
+    return (
+      <p className="mt-3 flex items-start gap-1.5 rounded-btn bg-amber/10 px-2.5 py-1.5 text-[11px] text-amber">
+        <ShieldAlert size={13} className="mt-px shrink-0" />
+        <span>Đã có khoá, chưa xác minh với nhà cung cấp</span>
+      </p>
+    );
+  }
+
+  return (
+    <p className="mt-3 flex items-start gap-1.5 rounded-btn bg-mint/10 px-2.5 py-1.5 text-[11px] text-mint">
+      <BadgeCheck size={13} className="mt-px shrink-0" />
+      <span className="font-mono">
+        {model.verificationNote}
+        {model.lastLatencyMs ? ` · ${model.lastLatencyMs}ms` : ""}
+      </span>
+    </p>
   );
 }

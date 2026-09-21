@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AesGcmEncryptionService } from '../common/security/aes-gcm-encryption.service.js';
+import { CREDENTIAL_SPECS, type CredentialProviderSpec } from './credential-registry.js';
+import { GeminiCredentialProvider } from './gemini-credential.provider.js';
+import { GeminiCredentialSpec } from './gemini.credential.js';
+import { GoogleTtsCredentialSpec } from './google-tts.credential.js';
 import { GoogleTtsCredentialVerifierService } from './google-tts-credential-verifier.service.js';
 import { GoogleTtsSynthesisService } from './google-tts-synthesis.service.js';
 import { GoogleTtsCredentialProvider } from './google-tts-credential.provider.js';
@@ -19,13 +23,23 @@ import { ProviderCredentialsService } from './provider-credentials.service.js';
   controllers: [ProviderCredentialsController],
   providers: [
     ProviderCredentialsService,
+    GoogleTtsCredentialSpec,
+    GeminiCredentialSpec,
+    {
+      // Danh sách nhà cung cấp. Thêm một nhà cung cấp mới = thêm một spec vào đây.
+      provide: CREDENTIAL_SPECS,
+      inject: [GoogleTtsCredentialSpec, GeminiCredentialSpec],
+      useFactory: (...specs: CredentialProviderSpec[]) => specs,
+    },
     GoogleTtsCredentialVerifierService,
     GoogleTtsSynthesisService,
     GoogleTtsCredentialProvider,
+    GeminiCredentialProvider,
     AesGcmEncryptionService,
   ],
   exports: [
     GoogleTtsCredentialProvider,
+    GeminiCredentialProvider,
     ProviderCredentialsService,
     GoogleTtsCredentialVerifierService,
     GoogleTtsSynthesisService,

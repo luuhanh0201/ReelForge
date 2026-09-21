@@ -137,6 +137,41 @@ export const importProductLink = (
     body: JSON.stringify(input),
   });
 
+export const AUTOBUILD_STEPS = ["import", "script", "assets", "voice", "speech"] as const;
+export type AutobuildStep = (typeof AUTOBUILD_STEPS)[number];
+
+/** Nhãn hiện cho người dùng, khớp thứ tự máy chủ chạy. */
+export const AUTOBUILD_STEP_LABELS: Record<AutobuildStep, string> = {
+  import: "Đọc thông tin sản phẩm",
+  script: "Viết kịch bản",
+  assets: "Gán hình cho từng cảnh",
+  voice: "Chọn giọng đọc",
+  speech: "Lồng tiếng",
+};
+
+export interface AutobuildStepReport {
+  step: AutobuildStep;
+  status: "done" | "skipped" | "failed";
+  detail: string;
+  /** Bước đang chờ người dùng xử lý — máy chủ quyết, giao diện không đoán qua câu chữ. */
+  needsUser: boolean;
+}
+
+/**
+ * Dựng sẵn cả video để người dùng chỉ còn kiểm tra.
+ *
+ * Luôn trả về bình thường kèm báo cáo từng bước — bước hỏng (sàn chặn, hết hạn mức lồng
+ * tiếng) không phải lỗi của lệnh gọi, và phần đã dựng được vẫn dùng tiếp được.
+ */
+export const autobuildProject = (
+  id: string,
+  input: { force?: boolean; templateCode?: string; durationSec?: number } = {},
+): Promise<{ project: Project; clips: VoiceClipView[]; steps: AutobuildStepReport[] }> =>
+  request(`/projects/${id}/autobuild`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
 export const deleteProject = (id: string): Promise<void> =>
   request<void>(`/projects/${id}`, { method: "DELETE" });
 

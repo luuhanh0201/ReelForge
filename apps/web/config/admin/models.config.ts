@@ -90,14 +90,17 @@ export interface AiModel {
   verifiedAt: string | null;
   verificationNote: string | null;
   lastLatencyMs: number | null;
+  /**
+   * Số giọng đang bật trỏ tới model này — câu trả lời thật cho "model nào đang chạy".
+   * Model kịch bản và video luôn là 0 cho tới khi hai luồng đó nối vào danh mục.
+   */
+  usedByVoices: number;
 }
 
 /** Nhà cung cấp có luồng xác minh thật ở backend. */
 export const VERIFIABLE_PROVIDERS = [
   { id: "google-tts", label: "Google Cloud TTS" },
 ] as const;
-
-
 
 
 
@@ -165,35 +168,3 @@ export const VOICE_GENDER_LABEL: Record<VoiceGender, string> = {
 
 
 
-export const HOOK_RETENTION = {
-  label: "Điểm giữ chân người xem",
-  value: 78,
-  hint: "Tỷ lệ giữ chân 3 giây đầu, đo trên 1.240 video gần nhất",
-};
-
-export interface RoutingRule {
-  id: string;
-  modelId: string;
-  name: string;
-  note: string;
-}
-
-export const ROUTING_STRATEGIES = [
-  { id: "quality", label: "Chất lượng cao nhất" },
-  { id: "speed", label: "Tốc độ nhanh nhất" },
-  { id: "cost", label: "Chi phí rẻ nhất" },
-] as const;
-
-export const DEFAULT_ROUTING: RoutingRule[] = [
-  { id: "r1", modelId: "gemini-flash", name: "Gemini 2.5 Flash", note: "Tối ưu chi phí và tốc độ viết kịch bản tiếng Việt" },
-  { id: "r2", modelId: "deepseek-v3", name: "DeepSeek V3", note: "Kích hoạt khi Gemini quá tải hoặc trả 5xx" },
-  { id: "r3", modelId: "gpt-4o", name: "GPT-4o", note: "Chốt chặn cuối, đảm bảo không đứt luồng dựng video" },
-];
-
-export const COST_LIMITS = {
-  dailyBudgetUsd: 120,
-  spentTodayUsd: 86.4,
-  alertThresholdPercent: 90,
-  channels: ["Telegram", "Email"],
-  fallbackTimeoutMs: 200,
-};

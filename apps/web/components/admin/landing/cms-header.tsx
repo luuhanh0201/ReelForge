@@ -2,18 +2,10 @@
 
 import { ExternalLink, LayoutTemplate, Loader2, RotateCcw, Save } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { BRAND_PRESETS } from "@/config/admin/landing.config";
 import type { LandingCmsState } from "@/lib/admin/use-landing-cms";
 import { AdminButton, AdminCard, Pill } from "@/components/admin/primitives";
 
-const SUB_NAV = [
-  { href: "/admin/landing-cms", label: "Tất cả danh mục" },
-  { href: "/admin/landing-voice", label: "1. Giọng đọc" },
-  { href: "/admin/landing-theme", label: "2. Màu & Branding" },
-  { href: "/admin/landing-content", label: "3. Nội dung & Tiêu đề" },
-  { href: "/admin/landing-showcase", label: "4. Video mẫu" },
-];
 
 const presetName = (hex: string): string =>
   BRAND_PRESETS.find((preset) => preset.hex.toLowerCase() === hex.toLowerCase())?.label ??
@@ -32,7 +24,6 @@ export function CmsHeader({
   onPublish: () => void;
   onReset: () => void;
 }) {
-  const pathname = usePathname();
   const brandHex = cms.draft?.theme.brandHex ?? "#ff6b35";
 
   return (
@@ -138,25 +129,6 @@ export function CmsHeader({
         </div>
       </AdminCard>
 
-      <nav className="flex flex-wrap gap-2" aria-label="Danh mục CMS">
-        {SUB_NAV.map((item) => {
-          const active = pathname === item.href;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`inline-flex h-9 items-center rounded-full border px-4 text-xs font-semibold transition-colors ${
-                active
-                  ? "border-brand bg-brand text-[#10151e]"
-                  : "border-line bg-subtle text-muted hover:border-brand/45 hover:text-ink"
-              }`}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
     </>
   );
 }

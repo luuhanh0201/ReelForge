@@ -1,38 +1,5 @@
 export type KeyStatus = "up" | "degraded" | "down" | "unknown";
 
-export interface ApiKeyEntry {
-  id: string;
-  provider: string;
-  scope: string;
-  /** Chỉ lưu phần che sẵn — hệ thống không bao giờ trả key gốc về trình duyệt. */
-  maskedKey: string;
-  lastRotatedAt: string;
-  status: KeyStatus;
-  latencyMs: number | null;
-}
-
-/**
- * Khóa nhà cung cấp — **không còn dữ liệu mẫu**.
- * Credential Google Cloud TTS đã có luồng thật riêng (thẻ "Thông tin xác thực dịch vụ"
- * ở đầu trang, đọc `/admin/provider-credentials/google-tts`). Các nhà cung cấp khác sẽ
- * được thêm vào đây khi backend có endpoint tương ứng.
- */
-export const API_KEYS: ApiKeyEntry[] = [];
-
-export interface WebhookEntry {
-  id: string;
-  event: string;
-  url: string;
-  active: boolean;
-  lastDeliveryAt: string;
-}
-
-export const WEBHOOKS: WebhookEntry[] = [
-  { id: "w-tiktok-order", event: "TikTok Shop · đơn hàng affiliate mới", url: "https://api.reelforge.vn/webhooks/tiktok/orders", active: true, lastDeliveryAt: "2026-08-29 09:04" },
-  { id: "w-shopee-order", event: "Shopee · đơn hàng affiliate mới", url: "https://api.reelforge.vn/webhooks/shopee/orders", active: true, lastDeliveryAt: "2026-08-29 08:58" },
-  { id: "w-payment", event: "Cổng thanh toán · nạp tiền thành công", url: "https://api.reelforge.vn/webhooks/payment", active: false, lastDeliveryAt: "2026-08-27 16:22" },
-];
-
 export type LogLevel = "info" | "warning" | "critical";
 
 export interface AuditLog {

@@ -22,7 +22,6 @@ import {
   createProject,
   deleteProject,
   fetchProjects,
-  importProductLink,
   type AspectRatio,
   type Project,
   type ProjectMode,
@@ -118,8 +117,6 @@ function ProjectList() {
   );
   const [creating, setCreating] = useState<ProjectMode | null>(null);
   const [busy, setBusy] = useState(false);
-  /** Đang đọc link — tách khỏi `busy` để nút nói đúng việc đang làm. */
-  const [importing, setImporting] = useState(false);
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
   /** Lỗi của ô link nằm ngay dưới ô, không phải toast — xem design-system §7.7d. */
@@ -197,20 +194,12 @@ function ProjectList() {
         sourceUrl: shopLink?.url.href,
       });
 
-      if (shopLink) {
-        setImporting(true);
-        // Đọc hỏng không chặn việc vào phòng dựng: dự án đã có, và mục Sản phẩm ở đó cho
-        // điền tay hoặc đọc lại. Chỉ báo lỗi để người dùng biết vì sao form còn trống.
-        await importProductLink(project.id).catch((cause: unknown) => {
-          setError(cause instanceof Error ? cause.message : "Không đọc được link");
-        });
-      }
-
-      router.push(`/studio/${project.id}`);
+      // Đọc link và dựng kịch bản chạy ở phòng dựng chứ không phải ở đây: chuỗi đó mất
+      // hàng chục giây, và người dùng nên đứng chờ ngay tại nơi kết quả sẽ hiện ra.
+      router.push(`/studio/${project.id}${creating === "link" ? "?autobuild=1" : ""}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Không tạo được dự án");
       setBusy(false);
-      setImporting(false);
     }
   };
 
@@ -362,8 +351,8 @@ function ProjectList() {
                     <span className="text-[11px] text-muted">
                       {t(
                         L(
-                          "Máy đọc tên, giá, mô tả và ảnh. Phần nào sàn không trả về, bạn điền tay ở phòng dựng.",
-                          "We read the name, price, description and images. Anything the store hides, you fill in the studio.",
+                          "Hệ thống tự đọc thông tin, viết kịch bản, gán hình và lồng tiếng. Bạn chỉ kiểm tra lại lần cuối.",
+                          "We read the product, write the script, place the images and add the voice-over. You just review it.",
                         ),
                       )}
                     </span>
@@ -415,9 +404,7 @@ function ProjectList() {
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-btn bg-brand px-5 text-sm font-bold text-[#10151e] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
                 >
                   {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                  {importing
-                    ? t(L("Đang đọc link…", "Reading the link…"))
-                    : t(L("Tạo dự án", "Create project"))}
+                  {t(L("Tạo dự án", "Create project"))}
                 </button>
                 <button
                   type="button"

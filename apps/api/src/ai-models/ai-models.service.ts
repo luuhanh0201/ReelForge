@@ -46,6 +46,14 @@ export interface AiModelView {
   verifiedAt: string | null;
   verificationNote: string | null;
   lastLatencyMs: number | null;
+  /**
+   * Số giọng **đang bật** trỏ tới model này.
+   *
+   * Đây là câu trả lời thật cho "model nào đang chạy": danh mục có thể liệt kê bao nhiêu
+   * model cũng được, nhưng chỉ model có giọng dùng tới mới thực sự đi vào sản phẩm.
+   * Model kịch bản và video hiện luôn là 0 vì hai luồng đó chưa nối vào danh mục.
+   */
+  usedByVoices: number;
 }
 
 export interface AiModelInput {
@@ -99,7 +107,20 @@ export class AiModelsService {
     private readonly auditLogs: AuditLogService,
   ) {}
 
-  private view(model: AiModel): AiModelView {
+  /** Đếm giọng đang bật theo model, một truy vấn cho cả danh sách. */
+  private async voiceUsage(): Promise<Map<string, number>> {
+    const rows = await this.voices
+      .createQueryBuilder('voice')
+      .select('voice.modelId', 'modelId')
+      .addSelect('COUNT(*)', 'total')
+      .where('voice.enabled = true')
+      .groupBy('voice.model_id')
+      .getRawMany<{ modelId: string; total: string }>();
+
+    return new Map(rows.map((row) => [row.modelId, Number(row.total)]));
+  }
+
+  private view(model: AiModel, usedByVoices = 0): AiModelView {
     const cost: ModelCost = {
       amount: Number(model.costAmount),
       unit: model.costUnit as CostUnit,
@@ -125,6 +146,7 @@ export class AiModelsService {
       verifiedAt: model.verifiedAt?.toISOString() ?? null,
       verificationNote: model.verificationNote,
       lastLatencyMs: model.lastLatencyMs,
+      usedByVoices,
     };
   }
 
@@ -225,12 +247,15 @@ export class AiModelsService {
       throw invalid(`Tham số "kind" chỉ nhận: ${KINDS.join(', ')}`);
     }
 
-    const models = await this.repository.find({
-      where: kind ? { kind: kind as ModelKind } : {},
-      order: { enabled: 'DESC', name: 'ASC' },
-    });
+    const [models, usage] = await Promise.all([
+      this.repository.find({
+        where: kind ? { kind: kind as ModelKind } : {},
+        order: { enabled: 'DESC', name: 'ASC' },
+      }),
+      this.voiceUsage(),
+    ]);
 
-    return models.map((model) => this.view(model));
+    return models.map((model) => this.view(model, usage.get(model.id) ?? 0));
   }
 
   /** Model mới luôn tắt sẵn để buộc benchmark trước khi mở ra hệ thống. */

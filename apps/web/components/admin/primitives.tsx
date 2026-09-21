@@ -6,10 +6,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleHelp,
+  MoreHorizontal,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ACCENT, type Accent } from "@/lib/accent";
 import { PAGE_SIZES, type PaginationState } from "@/lib/admin/pagination";
 
@@ -189,6 +190,109 @@ export function AdminButton({
     >
       {children}
     </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Thanh tab trong một trang                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Tab của các trang gộp (AI & Model, Landing Page).
+ *
+ * Tab **nằm trong URL** chứ không phải state: tải lại trang hay gửi link cho người khác
+ * đều giữ đúng chỗ đang đứng, và đó cũng là thứ các mục menu riêng trước đây làm được.
+ */
+export function AdminTabs<T extends string>({
+  items,
+  active,
+  onSelect,
+}: {
+  items: readonly { id: T; label: string }[];
+  active: T;
+  onSelect: (id: T) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1 rounded-card border border-line bg-surface p-1">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          aria-pressed={active === item.id}
+          onClick={() => onSelect(item.id)}
+          className={`rounded-btn px-4 py-2 text-sm font-semibold transition-colors ${
+            active === item.id ? "bg-brand/12 text-brand" : "text-muted hover:text-ink"
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Menu ⋯ cho các thao tác ít dùng                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Gom những thao tác hiếm (sửa, cấu hình, gỡ) khỏi hàng nút chính.
+ *
+ * Một thẻ bày sẵn năm nút ngang hàng thì thao tác làm hằng ngày và thao tác cả năm một lần
+ * trông giống hệt nhau, và người dùng phải đọc hết mới biết bấm cái nào.
+ *
+ * Lớp phủ trong suốt phía sau để bấm ra ngoài là đóng — không cần listener toàn cục.
+ */
+export function AdminRowMenu({
+  label,
+  items,
+}: {
+  label: string;
+  items: { label: string; icon?: ReactNode; danger?: boolean; disabled?: boolean; onClick: () => void }[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <AdminButton
+        variant="ghost"
+        className="h-9 w-9 shrink-0 px-0"
+        title={label}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <MoreHorizontal size={18} />
+      </AdminButton>
+
+      {open ? (
+        <>
+          <button
+            type="button"
+            aria-label="Đóng menu"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div className="absolute right-0 top-10 z-50 w-56 rounded-card border border-line bg-surface p-1 shadow-[0_18px_50px_-20px_rgba(0,0,0,0.6)]">
+            {items.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  item.onClick();
+                }}
+                className={`flex w-full items-center gap-2.5 rounded-btn px-2.5 py-2 text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                  item.danger ? "text-danger hover:bg-danger/10" : "text-ink hover:bg-subtle"
+                }`}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 

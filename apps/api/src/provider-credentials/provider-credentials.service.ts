@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { AuditLogService } from '../audit/audit-log.service.js';
@@ -9,18 +9,21 @@ import {
   ProviderCredential,
   type CredentialStatus,
 } from './provider-credential.entity.js';
+import type { GoogleServiceAccount } from './google-service-account.validator.js';
 import {
-  maskClientEmail,
-  parseGoogleServiceAccount,
-  privateKeyIdSuffix,
-  type GoogleServiceAccount,
-} from './google-service-account.validator.js';
-import { GoogleTtsCredentialVerifierService } from './google-tts-credential-verifier.service.js';
+  CREDENTIAL_SPECS,
+  type CredentialProviderSpec,
+  type CredentialType,
+} from './credential-registry.js';
 
 /** Thông tin trả về client — đã che, không chứa bất kỳ mẩu bí mật nào. */
 export interface CredentialStatusView {
   provider: string;
+  label: string;
+  type: CredentialType;
+  docsUrl: string;
   configured: boolean;
+  displayHint: string | null;
   projectId: string | null;
   clientEmailMasked: string | null;
   privateKeyIdSuffix: string | null;
@@ -38,25 +41,57 @@ export class ProviderCredentialsService {
   private readonly logger = new Logger(ProviderCredentialsService.name);
   private readonly lastTestAt = new Map<string, number>();
 
+  private readonly specs: Map<string, CredentialProviderSpec>;
+
   constructor(
     @InjectRepository(ProviderCredential)
     private readonly repository: Repository<ProviderCredential>,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly encryption: AesGcmEncryptionService,
-    private readonly verifier: GoogleTtsCredentialVerifierService,
+    @Inject(CREDENTIAL_SPECS) specs: CredentialProviderSpec[],
     private readonly auditLogs: AuditLogService,
-  ) {}
+  ) {
+    this.specs = new Map(specs.map((spec) => [spec.id, spec]));
+  }
+
+  /** Danh mục nhà cung cấp để giao diện dựng form và biết chỗ lấy credential. */
+  listProviders(): CredentialProviderSpec[] {
+    return [...this.specs.values()];
+  }
+
+  private spec(provider: string): CredentialProviderSpec {
+    const spec = this.specs.get(provider);
+
+    if (!spec) {
+      throw new BusinessException('NOT_FOUND', {
+        message: 'Không có nhà cung cấp nào mang mã này',
+      });
+    }
+
+    return spec;
+  }
 
   /** AAD gắn ciphertext với đúng provider + bản ghi + version khoá. */
   private aad(provider: string, recordId: string, keyVersion: number): string {
     return `${provider}|${recordId}|${keyVersion}`;
   }
 
-  private view(record: ProviderCredential | null): CredentialStatusView {
+  private view(
+    spec: CredentialProviderSpec,
+    record: ProviderCredential | null,
+  ): CredentialStatusView {
+    const base = {
+      provider: spec.id,
+      label: spec.label,
+      type: spec.type,
+      docsUrl: spec.docsUrl,
+    };
+
     if (!record) {
       return {
-        provider: GOOGLE_TTS_PROVIDER,
+        ...base,
         configured: false,
+        displayHint: null,
         projectId: null,
         clientEmailMasked: null,
         privateKeyIdSuffix: null,
@@ -68,8 +103,9 @@ export class ProviderCredentialsService {
     }
 
     return {
-      provider: record.provider,
+      ...base,
       configured: true,
+      displayHint: record.displayHint || record.clientEmailMasked,
       projectId: record.projectId,
       clientEmailMasked: record.clientEmailMasked,
       privateKeyIdSuffix: record.privateKeyIdSuffix,
@@ -80,18 +116,29 @@ export class ProviderCredentialsService {
     };
   }
 
-  private find(provider = GOOGLE_TTS_PROVIDER): Promise<ProviderCredential | null> {
+  private find(provider: string): Promise<ProviderCredential | null> {
     return this.repository.findOne({ where: { provider } });
   }
 
-  async getStatus(): Promise<CredentialStatusView> {
-    return this.view(await this.find());
+  async getStatus(provider = GOOGLE_TTS_PROVIDER): Promise<CredentialStatusView> {
+    const spec = this.spec(provider);
+
+    return this.view(spec, await this.find(provider));
+  }
+
+  /** Tất cả nhà cung cấp kèm trạng thái, cho trang quản lý khoá. */
+  async listStatuses(): Promise<CredentialStatusView[]> {
+    const records = await this.repository.find();
+
+    return this.listProviders().map((spec) =>
+      this.view(spec, records.find((record) => record.provider === spec.id) ?? null),
+    );
   }
 
   /** Giải mã credential đang lưu. Chỉ dùng nội bộ, không bao giờ trả ra controller. */
-  async loadAccount(provider = GOOGLE_TTS_PROVIDER): Promise<{
+  async loadPayload(provider = GOOGLE_TTS_PROVIDER): Promise<{
     record: ProviderCredential;
-    account: GoogleServiceAccount;
+    payload: unknown;
   }> {
     const record = await this.find(provider);
 
@@ -110,25 +157,50 @@ export class ProviderCredentialsService {
       this.aad(record.provider, record.id, record.encryptionKeyVersion),
     );
 
-    return { record, account: JSON.parse(plaintext) as GoogleServiceAccount };
+    // Service account lưu nguyên JSON; api key lưu chính chuỗi khoá.
+    return {
+      record,
+      payload: record.credentialType === 'api_key' ? plaintext : JSON.parse(plaintext),
+    };
+  }
+
+  /**
+   * Credential Google TTS dưới dạng service account.
+   *
+   * Giữ lại tên cũ vì `GoogleTtsCredentialProvider` và bộ tổng hợp giọng đang gọi nó, và
+   * chúng chỉ quan tâm đúng một nhà cung cấp.
+   */
+  async loadAccount(provider = GOOGLE_TTS_PROVIDER): Promise<{
+    record: ProviderCredential;
+    account: GoogleServiceAccount;
+  }> {
+    const { record, payload } = await this.loadPayload(provider);
+
+    return { record, account: payload as GoogleServiceAccount };
   }
 
   /**
    * Tải lên hoặc thay thế credential.
    *
-   * Thứ tự bắt buộc: validate -> gọi thử Google -> mã hoá -> upsert nguyên tử.
-   * Google hỏng ở bước 2 thì không có gì được ghi, credential cũ vẫn chạy.
+   * Thứ tự bắt buộc: validate -> gọi thử nhà cung cấp -> mã hoá -> upsert nguyên tử.
+   * Nhà cung cấp hỏng ở bước 2 thì không có gì được ghi, credential cũ vẫn chạy.
    */
-  async upload(file: Buffer, ip: string | null): Promise<CredentialStatusView> {
-    const account = parseGoogleServiceAccount(file);
+  async upload(
+    provider: string,
+    input: { file?: Buffer; value?: string },
+    ip: string | null,
+  ): Promise<CredentialStatusView> {
+    const spec = this.spec(provider);
+    const payload = spec.parse(input);
+    const described = spec.describe(payload);
 
-    let verification: { latencyMs: number; voiceCount: number };
+    let verification: { latencyMs: number; metadata: Record<string, unknown> };
     try {
-      verification = await this.verifier.verify(account);
+      verification = await spec.verify(payload);
     } catch (error) {
       await this.auditLogs.record({
-        action: 'Tải lên credential Google TTS',
-        target: `${GOOGLE_TTS_PROVIDER} · ${maskClientEmail(account.client_email)}`,
+        action: `Tải lên credential ${spec.label}`,
+        target: `${spec.id} · ${described.displayHint}`,
         level: 'critical',
         success: false,
         ip,
@@ -139,91 +211,93 @@ export class ProviderCredentialsService {
       throw error;
     }
 
-    const existing = await this.find();
+    const existing = await this.find(spec.id);
     const recordId = existing?.id ?? crypto.randomUUID();
     const keyVersion = this.encryption.getActiveVersion();
-    const payload = this.encryption.encrypt(
-      JSON.stringify(account),
-      this.aad(GOOGLE_TTS_PROVIDER, recordId, keyVersion),
+    const encrypted = this.encryption.encrypt(
+      typeof payload === 'string' ? payload : JSON.stringify(payload),
+      this.aad(spec.id, recordId, keyVersion),
     );
 
     const record = existing ?? new ProviderCredential();
     record.id = recordId;
-    record.provider = GOOGLE_TTS_PROVIDER;
-    record.encryptedPayload = payload.ciphertext;
-    record.iv = payload.iv;
-    record.authTag = payload.authTag;
-    record.algorithm = payload.algorithm;
-    record.encryptionKeyVersion = payload.keyVersion;
-    record.credentialFingerprint = this.encryption.fingerprint(
-      `${account.client_email}:${account.private_key_id}`,
-    );
-    record.projectId = account.project_id;
-    record.clientEmailMasked = maskClientEmail(account.client_email);
-    record.privateKeyIdSuffix = privateKeyIdSuffix(account.private_key_id);
+    record.provider = spec.id;
+    record.credentialType = spec.type;
+    record.encryptedPayload = encrypted.ciphertext;
+    record.iv = encrypted.iv;
+    record.authTag = encrypted.authTag;
+    record.algorithm = encrypted.algorithm;
+    record.encryptionKeyVersion = encrypted.keyVersion;
+    record.credentialFingerprint = this.encryption.fingerprint(described.fingerprintSource);
+    record.projectId = described.projectId;
+    record.clientEmailMasked = described.clientEmailMasked;
+    record.privateKeyIdSuffix = described.privateKeyIdSuffix;
+    record.displayHint = described.displayHint;
     record.status = 'connected';
     record.lastLatencyMs = verification.latencyMs;
     record.lastVerifiedAt = new Date();
 
-    // Transaction chỉ bọc thao tác ghi — không bao giờ giữ transaction trong lúc chờ Google.
+    // Transaction chỉ bọc thao tác ghi — không bao giờ giữ transaction trong lúc chờ mạng.
     const saved = await this.dataSource.transaction(async (manager) =>
       manager.getRepository(ProviderCredential).save(record),
     );
 
     await this.auditLogs.record({
       action: existing
-        ? 'Thay thế credential Google TTS'
-        : 'Tải lên credential Google TTS',
-      target: `${GOOGLE_TTS_PROVIDER} · ${saved.clientEmailMasked}`,
+        ? `Thay thế credential ${spec.label}`
+        : `Tải lên credential ${spec.label}`,
+      target: `${spec.id} · ${saved.displayHint}`,
       level: 'critical',
       ip,
       metadata: {
         projectId: saved.projectId,
         fingerprint: saved.credentialFingerprint.slice(0, 12),
         latencyMs: verification.latencyMs,
-        voiceCount: verification.voiceCount,
+        ...verification.metadata,
       },
     });
 
-    return this.view(saved);
+    return this.view(spec, saved);
   }
 
   /** Kiểm tra lại credential đang lưu, cập nhật trạng thái và latency. */
-  async test(ip: string | null): Promise<CredentialStatusView> {
-    const last = this.lastTestAt.get(GOOGLE_TTS_PROVIDER) ?? 0;
+  async test(provider: string, ip: string | null): Promise<CredentialStatusView> {
+    const spec = this.spec(provider);
+    const last = this.lastTestAt.get(spec.id) ?? 0;
+
     if (Date.now() - last < TEST_COOLDOWN_MS) {
       throw new BusinessException('TOO_MANY_REQUESTS', {
         message: 'Vui lòng chờ vài giây trước khi kiểm tra lại',
       });
     }
-    this.lastTestAt.set(GOOGLE_TTS_PROVIDER, Date.now());
+    this.lastTestAt.set(spec.id, Date.now());
 
-    const { record, account } = await this.loadAccount();
+    const { record, payload } = await this.loadPayload(spec.id);
 
     try {
-      const result = await this.verifier.verify(account);
+      const result = await spec.verify(payload);
       record.status = 'connected';
       record.lastLatencyMs = result.latencyMs;
       record.lastVerifiedAt = new Date();
       const saved = await this.repository.save(record);
 
       await this.auditLogs.record({
-        action: 'Kiểm tra credential Google TTS',
-        target: `${GOOGLE_TTS_PROVIDER} · ${saved.clientEmailMasked}`,
+        action: `Kiểm tra credential ${spec.label}`,
+        target: `${spec.id} · ${saved.displayHint}`,
         level: 'info',
         ip,
-        metadata: { latencyMs: result.latencyMs, voiceCount: result.voiceCount },
+        metadata: { latencyMs: result.latencyMs, ...result.metadata },
       });
 
-      return this.view(saved);
+      return this.view(spec, saved);
     } catch (error) {
       record.status = 'error';
       record.lastVerifiedAt = new Date();
       await this.repository.save(record);
 
       await this.auditLogs.record({
-        action: 'Kiểm tra credential Google TTS',
-        target: `${GOOGLE_TTS_PROVIDER} · ${record.clientEmailMasked}`,
+        action: `Kiểm tra credential ${spec.label}`,
+        target: `${spec.id} · ${record.displayHint}`,
         level: 'warning',
         success: false,
         ip,
@@ -237,34 +311,40 @@ export class ProviderCredentialsService {
   }
 
   async setStatus(
+    provider: string,
     status: Extract<CredentialStatus, 'connected' | 'disabled'>,
     ip: string | null,
   ): Promise<CredentialStatusView> {
-    const record = await this.find();
+    const spec = this.spec(provider);
+    const record = await this.find(spec.id);
     if (!record) throw new BusinessException('CREDENTIAL_NOT_CONFIGURED');
 
     record.status = status;
     const saved = await this.repository.save(record);
 
     await this.auditLogs.record({
-      action: status === 'disabled' ? 'Tắt credential Google TTS' : 'Bật credential Google TTS',
-      target: `${GOOGLE_TTS_PROVIDER} · ${saved.clientEmailMasked}`,
+      action:
+        status === 'disabled'
+          ? `Tắt credential ${spec.label}`
+          : `Bật credential ${spec.label}`,
+      target: `${spec.id} · ${saved.displayHint}`,
       level: 'critical',
       ip,
     });
 
-    return this.view(saved);
+    return this.view(spec, saved);
   }
 
-  async remove(ip: string | null): Promise<{ removed: boolean }> {
-    const record = await this.find();
+  async remove(provider: string, ip: string | null): Promise<{ removed: boolean }> {
+    const spec = this.spec(provider);
+    const record = await this.find(spec.id);
     if (!record) throw new BusinessException('CREDENTIAL_NOT_CONFIGURED');
 
     await this.repository.delete({ id: record.id });
 
     await this.auditLogs.record({
-      action: 'Xóa credential Google TTS',
-      target: `${GOOGLE_TTS_PROVIDER} · ${record.clientEmailMasked}`,
+      action: `Xóa credential ${spec.label}`,
+      target: `${spec.id} · ${record.displayHint}`,
       level: 'critical',
       ip,
       metadata: { fingerprint: record.credentialFingerprint.slice(0, 12) },

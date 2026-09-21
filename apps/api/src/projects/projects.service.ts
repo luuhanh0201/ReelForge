@@ -295,6 +295,53 @@ export class ProjectsService {
     return this.projects.save(project);
   }
 
+  /**
+   * Rải ảnh của dự án vào các cảnh còn trống, theo đúng thứ tự trong thư viện.
+   *
+   * **Ít ảnh hơn số cảnh thì quay vòng dùng lại**: một cảnh không có hình là một khoảng đen
+   * giữa video, tệ hơn hẳn việc thấy lại ảnh sản phẩm ở cảnh sau. Người dùng đổi tay sau
+   * vẫn được.
+   *
+   * Cảnh đã có ảnh thì không đụng tới — hàm này để điền chỗ trống, không phải để sắp xếp
+   * lại công người dùng đã làm.
+   */
+  async assignAssetsInOrder(id: string, userId: string): Promise<Project> {
+    const project = await this.findOwned(id, userId);
+    const assets = await this.assets.find({
+      where: { projectId: project.id },
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+
+    if (assets.length === 0 || project.lines.length === 0) return project;
+
+    let position = 0;
+    project.lines = project.lines.map((line) => {
+      if (line.assetId) return line;
+
+      const asset = assets[position % assets.length]!;
+      position += 1;
+
+      // Video quyết định luôn thời lượng cảnh, đúng như khi người dùng tự gán tay; ảnh và
+      // GIF thì giữ thời lượng hiện có vì người dùng mới là người đặt.
+      const durationMs =
+        asset.kind === 'video' && asset.durationMs && !line.voiceClipId
+          ? asset.durationMs
+          : line.durationMs;
+
+      return { ...line, assetId: asset.id, durationMs };
+    });
+
+    return this.projects.save(project);
+  }
+
+  /** Đặt giọng đọc cho dự án — dùng khi luồng tự động chọn hộ người dùng. */
+  async setVoice(id: string, userId: string, voiceId: string): Promise<Project> {
+    const project = await this.findOwned(id, userId);
+    project.voiceId = voiceId;
+
+    return this.projects.save(project);
+  }
+
   /** Sửa thoại, đổi ảnh hoặc đổi cụm nhấn của một cảnh. */
   async updateLine(
     id: string,

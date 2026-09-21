@@ -153,6 +153,19 @@ export const ERROR_CODES = {
     status: HttpStatus.GATEWAY_TIMEOUT,
     message: 'Gọi Google Text-to-Speech quá thời gian chờ',
   },
+  /* Dùng chung cho mọi nhà cung cấp có credential (Gemini, model video...). */
+  CREDENTIAL_REJECTED: {
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Nhà cung cấp từ chối credential này',
+  },
+  CREDENTIAL_TIMEOUT: {
+    status: HttpStatus.GATEWAY_TIMEOUT,
+    message: 'Gọi tới nhà cung cấp quá thời gian chờ',
+  },
+  CREDENTIAL_UNAVAILABLE: {
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: 'Không kết nối được tới nhà cung cấp',
+  },
   GOOGLE_TTS_UNAVAILABLE: {
     status: HttpStatus.SERVICE_UNAVAILABLE,
     message: 'Không kết nối được tới Google Text-to-Speech',

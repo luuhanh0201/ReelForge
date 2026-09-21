@@ -9,5 +9,6 @@ import { CrawlerService } from './crawler.service.js';
   imports: [ProjectsModule, MediaModule],
   controllers: [CrawlerController],
   providers: [CrawlerService],
+  exports: [CrawlerService],
 })
 export class CrawlerModule {}
