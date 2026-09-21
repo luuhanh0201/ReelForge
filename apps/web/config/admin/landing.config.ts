@@ -1,4 +1,4 @@
-import type { LandingConfig } from "@/lib/admin/landing-cms-api";
+import type { VoiceSlotId } from "@/lib/admin/landing-cms-api";
 
 /** Khóa lưu bản nháp chưa xuất bản, theo đúng đặc tả. */
 export const LANDING_DRAFT_KEY = "reelforge_landing_cms_config";
@@ -20,7 +20,7 @@ export const BRAND_PRESETS: { id: string; label: string; hex: string }[] = [
 
 /** Ba vị trí phát giọng trên landing, đúng ba điểm chạm âm thanh của khách. */
 export const VOICE_SLOTS: {
-  id: keyof LandingConfig["voice"];
+  id: VoiceSlotId;
   title: string;
   where: string;
   hint: string;

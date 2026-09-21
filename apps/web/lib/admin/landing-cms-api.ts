@@ -5,6 +5,9 @@ export interface Localized {
   en: string;
 }
 
+/** Ba điểm chạm âm thanh có cấu hình riêng; `showcase` là danh sách nên không nằm đây. */
+export type VoiceSlotId = "hero" | "studio" | "testimonial";
+
 export interface VoiceSlotConfig {
   voiceId: string;
   sampleText: string;
@@ -15,6 +18,8 @@ export interface LandingConfig {
     hero: VoiceSlotConfig;
     studio: VoiceSlotConfig;
     testimonial: VoiceSlotConfig & { speed: number };
+    /** Tối đa 4 giọng hiện ở mục "Giọng đọc AI" trên landing, theo thứ tự thẻ. */
+    showcase: string[];
   };
   theme: {
     brandHex: string;

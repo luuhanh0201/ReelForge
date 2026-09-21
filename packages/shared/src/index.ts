@@ -6,3 +6,4 @@ export * from "./tour.js";
 export * from "./speech.js";
 export * from "./variation.js";
 export * from "./product.js";
+export * from "./script-readiness.js";

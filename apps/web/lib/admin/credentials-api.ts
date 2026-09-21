@@ -13,7 +13,7 @@ export interface CredentialStatusView {
   /** Trang lấy credential của nhà cung cấp. */
   docsUrl: string;
   configured: boolean;
-  /** Chuỗi ngắn để nhận ra credential đang lưu, ví dụ `AIza…7x2K`. */
+  /** Chuỗi ngắn để nhận ra credential đang lưu, ví dụ `AQ.A…7x2K`. */
   displayHint: string | null;
   projectId: string | null;
   clientEmailMasked: string | null;

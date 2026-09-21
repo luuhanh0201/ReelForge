@@ -1,4 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { scriptReadiness, type ScriptReadiness } from '@repo/shared';
+import { AiModelsService } from '../ai-models/ai-models.service.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
 import { CrawlerService } from '../crawler/crawler.service.js';
 import { MediaService } from '../media/media.service.js';
@@ -35,6 +37,8 @@ export interface AutobuildResult {
   project: Project;
   clips: VoiceClipView[];
   steps: AutobuildStepReport[];
+  /** Dữ liệu đã đủ để gọi AI viết kịch bản hay chưa — giao diện hiện lại đúng lý do này. */
+  readiness: ScriptReadiness;
 }
 
 export interface AutobuildInput {
@@ -65,12 +69,25 @@ export class AutobuildService {
 
   constructor(
     private readonly projects: ProjectsService,
+    private readonly models: AiModelsService,
     private readonly media: MediaService,
     private readonly crawler: CrawlerService,
     private readonly voices: VoicesService,
     private readonly voice: ProjectVoiceService,
     @Inject(SCRIPT_PROVIDER) private readonly script: ScriptProvider,
   ) {}
+
+  /**
+   * Cổng chặn trước mọi lệnh gọi AI. Dùng chung hàm với giao diện (`@repo/shared`) nên hai
+   * bên không bao giờ nói khác nhau về việc "đã đủ dữ liệu chưa".
+   */
+  async checkReadiness(project: Project, assetCount: number): Promise<ScriptReadiness> {
+    return scriptReadiness({
+      product: project.product,
+      assetCount,
+      hasEnabledModel: await this.models.hasUsableModel('script'),
+    });
+  }
 
   async run(
     projectId: string,
@@ -134,8 +151,9 @@ export class AutobuildService {
       });
     }
 
-    // 2. Kịch bản. Chỗ này sẽ do LLM đảm nhận khi có key; các bước sau không cần biết.
+    // 2. Kịch bản.
     const assets = await this.media.listByProject(projectId);
+    const readiness = await this.checkReadiness(project, assets.length);
 
     if (project.lines.length > 0 && !input.force) {
       record('script', 'skipped', 'Dự án đã có kịch bản');
@@ -147,9 +165,18 @@ export class AutobuildService {
           templateCode: input.templateCode,
         });
 
+        // Nói rõ kịch bản do đâu mà ra: người dùng cần biết đang cầm bản AI viết hay bản
+        // mẫu, và nếu là bản mẫu thì vì thiếu cái gì.
+        const source =
+          this.script.id === 'template'
+            ? readiness.ready
+              ? 'bộ mẫu'
+              : `bộ mẫu · ${readiness.reason.toLowerCase()}`
+            : 'AI';
+
         return {
           project: updated,
-          detail: `${updated.lines.length} cảnh · ${durationSec} giây`,
+          detail: `${updated.lines.length} cảnh · ${durationSec} giây · ${source}`,
         };
       });
     }
@@ -212,6 +239,6 @@ export class AutobuildService {
       });
     }
 
-    return { project, clips: await this.voice.toViews(project), steps };
+    return { project, clips: await this.voice.toViews(project), steps, readiness };
   }
 }

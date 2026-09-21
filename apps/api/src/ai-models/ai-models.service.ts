@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLogService } from '../audit/audit-log.service.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
+import { GEMINI_PROVIDER } from '../provider-credentials/gemini.credential.js';
 import { GOOGLE_TTS_PROVIDER } from '../provider-credentials/provider-credential.entity.js';
-import { GoogleTtsCredentialVerifierService } from '../provider-credentials/google-tts-credential-verifier.service.js';
 import { ProviderCredentialsService } from '../provider-credentials/provider-credentials.service.js';
 import { TtsUsageService, type UsageSummary } from '../tts-usage/tts-usage.service.js';
 import { Voice } from '../voices/voice.entity.js';
@@ -70,7 +70,11 @@ export interface AiModelInput {
 }
 
 /** Nhà cung cấp có luồng xác minh thật. Thêm provider mới thì bổ sung vào đây. */
-export const VERIFIABLE_PROVIDERS = [GOOGLE_TTS_PROVIDER] as const;
+/**
+ * Nhà cung cấp có luồng xác minh thật. Phải khớp registry credential — model gắn nhà cung
+ * cấp không nằm ở đây thì bấm Xác minh sẽ hỏng.
+ */
+export const VERIFIABLE_PROVIDERS = [GOOGLE_TTS_PROVIDER, GEMINI_PROVIDER] as const;
 
 const KINDS: ModelKind[] = ['video', 'voice', 'script'];
 
@@ -96,13 +100,25 @@ const slugify = (value: string): string =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
 
+/**
+ * Một câu ngắn kể nhà cung cấp vừa trả về gì, dựng từ metadata của chính spec đó.
+ *
+ * Không ép mọi nhà cung cấp trả cùng một hình dạng: Google TTS đếm giọng, Gemini đếm model,
+ * nhà cung cấp video sau này sẽ đếm thứ khác.
+ */
+const describeVerification = (metadata: Record<string, unknown>): string => {
+  if (typeof metadata.voiceCount === 'number') return ` · ${metadata.voiceCount} giọng vi-VN`;
+  if (typeof metadata.modelCount === 'number') return ` · ${metadata.modelCount} model khả dụng`;
+
+  return '';
+};
+
 @Injectable()
 export class AiModelsService {
   constructor(
     @InjectRepository(AiModel) private readonly repository: Repository<AiModel>,
     @InjectRepository(Voice) private readonly voices: Repository<Voice>,
     private readonly credentials: ProviderCredentialsService,
-    private readonly googleTts: GoogleTtsCredentialVerifierService,
     private readonly usageTracker: TtsUsageService,
     private readonly auditLogs: AuditLogService,
   ) {}
@@ -242,6 +258,22 @@ export class AiModelsService {
     });
   }
 
+  /**
+   * Có model của loại này **đang bật và đã được nhà cung cấp chấp nhận** hay không.
+   *
+   * Dùng làm một điều kiện của cổng `scriptReadiness`: chưa bật model thì đừng gọi AI, và
+   * đó là việc của quản trị viên chứ không phải lỗi của người dùng.
+   */
+  async hasUsableModel(kind: ModelKind): Promise<boolean> {
+    const models = await this.repository.find({
+      where: { kind, enabled: true, comingSoon: false },
+    });
+
+    // Model gắn nhà cung cấp mà chưa xác minh thì backend đã không cho bật, nhưng kiểm lại
+    // ở đây để cổng không phụ thuộc vào một luật nằm ở chỗ khác.
+    return models.some((model) => !model.credentialProvider || model.verifiedAt !== null);
+  }
+
   async list(kind?: string): Promise<AiModelView[]> {
     if (kind !== undefined && !KINDS.includes(kind as ModelKind)) {
       throw invalid(`Tham số "kind" chỉ nhận: ${KINDS.join(', ')}`);
@@ -369,32 +401,13 @@ export class AiModelsService {
       });
     }
 
-    if (model.credentialProvider !== GOOGLE_TTS_PROVIDER) {
-      throw new BusinessException('CONFLICT', {
-        message: `Chưa hỗ trợ xác minh với "${model.credentialProvider}"`,
-      });
-    }
-
-    // Ném CREDENTIAL_NOT_CONFIGURED nếu chưa ai tải service account lên.
-    const { account } = await this.credentials.loadAccount(GOOGLE_TTS_PROVIDER);
+    let result: { label: string; latencyMs: number; metadata: Record<string, unknown> };
 
     try {
-      const result = await this.googleTts.verify(account);
-
-      model.verifiedAt = new Date();
-      model.verificationNote = `Google chấp nhận credential · ${result.voiceCount} giọng vi-VN`;
-      model.lastLatencyMs = result.latencyMs;
-      const saved = await this.repository.save(model);
-
-      await this.auditLogs.record({
-        action: 'Xác minh model AI với nhà cung cấp',
-        target: `${saved.kind} · ${saved.name} (${saved.id})`,
-        level: 'info',
-        ip,
-        metadata: { latencyMs: result.latencyMs, voiceCount: result.voiceCount },
-      });
-
-      return this.view(saved);
+      // Mỗi nhà cung cấp tự khai cách gọi thử trong registry credential, nên thêm nhà cung
+      // cấp mới không phải sửa chỗ này. Trước đây hàm này đóng cứng cho Google TTS và từ
+      // chối thẳng mọi model gắn nhà cung cấp khác — model Gemini không tài nào bật được.
+      result = await this.credentials.verifyStored(model.credentialProvider);
     } catch (error) {
       model.verifiedAt = null;
       model.verificationNote =
@@ -414,6 +427,23 @@ export class AiModelsService {
 
       throw error;
     }
+
+    model.verifiedAt = new Date();
+    model.verificationNote = `${result.label} chấp nhận credential${describeVerification(
+      result.metadata,
+    )}`;
+    model.lastLatencyMs = result.latencyMs;
+    const saved = await this.repository.save(model);
+
+    await this.auditLogs.record({
+      action: 'Xác minh model AI với nhà cung cấp',
+      target: `${saved.kind} · ${saved.name} (${saved.id})`,
+      level: 'info',
+      ip,
+      metadata: { latencyMs: result.latencyMs, ...result.metadata },
+    });
+
+    return this.view(saved);
   }
 
   async remove(id: string, ip: string | null): Promise<{ removed: boolean }> {

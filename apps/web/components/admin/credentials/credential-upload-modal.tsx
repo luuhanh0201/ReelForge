@@ -119,7 +119,7 @@ export function CredentialUploadModal({
             <AdminInput
               type="password"
               ariaLabel={`API key của ${view.label}`}
-              placeholder="AIza..."
+              placeholder="AQ.Ab... hoặc AIza..."
               value={keyValue}
               onChange={(value) => {
                 setKeyValue(value);

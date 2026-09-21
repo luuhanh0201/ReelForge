@@ -589,10 +589,10 @@ export const FEATURES: FeatureItem[] = [
 
 export const VOICE_SECTION = {
   eyebrow: L("AI VOICE STUDIO", "AI VOICE STUDIO"),
-  title: L("Nghe thử 4 MC ảo chốt đơn", "Audition 4 sales-ready AI hosts"),
+  title: L("Nghe thử giọng đọc AI", "Audition the AI voices"),
   description: L(
-    "Mỗi giọng đọc được luyện theo một ngành hàng riêng, đọc đúng đoạn kịch bản bán hàng thực tế bên dưới.",
-    "Each voice is tuned for a product category and reads the real sales script shown below.",
+    "Chính những giọng đang chạy trong Studio. Bấm nghe là ra đúng file âm thanh hệ thống tạo ra, không phải bản mô phỏng.",
+    "The very voices running inside Studio. Press play and you hear the real audio the system generates, not a mock-up.",
   ),
   play: L("Nghe thử", "Play sample"),
   pause: L("Tạm dừng", "Pause"),

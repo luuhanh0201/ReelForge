@@ -5,7 +5,14 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ImageMap } from "@repo/render-core";
-import { LAYOUTS, type Crop, type FrameLayout, type FrameLayouts, type SubtitleStyle } from "@repo/shared";
+import {
+  LAYOUTS,
+  type Crop,
+  type FrameLayout,
+  type FrameLayouts,
+  type ScriptReadiness,
+  type SubtitleStyle,
+} from "@repo/shared";
 import { useApp } from "@/lib/app-provider";
 import {
   addLine,
@@ -17,6 +24,7 @@ import {
   fetchScriptTemplates,
   fetchVoiceClips,
   fetchVoices,
+  fetchScriptReadiness,
   autobuildProject,
   importProductLink,
   MAX_LINES,
@@ -133,6 +141,8 @@ function StudioEditor() {
   const [importing, setImporting] = useState(false);
   const [autobuilding, setAutobuilding] = useState(false);
   const [autobuildSteps, setAutobuildSteps] = useState<AutobuildStepReport[] | null>(null);
+  /** Đủ dữ liệu gọi AI viết kịch bản chưa — máy chủ tính, đọc lại sau mỗi lần sửa sản phẩm. */
+  const [readiness, setReadiness] = useState<ScriptReadiness | null>(null);
   /** Đã khởi động lần dựng tự động hay chưa — chống chạy hai lần trong cùng một phiên mở. */
   const autobuildStarted = useRef(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
@@ -213,6 +223,7 @@ function StudioEditor() {
       const result = await autobuildProject(projectId);
       setProject(result.project);
       setAutobuildSteps(result.steps);
+      setReadiness(result.readiness);
       setDuration(Math.max(30, result.project.lines.length * 10 || 30));
 
       const [loadedAssets, voice] = await Promise.all([
@@ -276,6 +287,8 @@ function StudioEditor() {
         setVoiceClips(voice.items);
         setQuota(voice.quota);
         setDuration(Math.max(30, loadedProject.lines.length * 10 || 30));
+        // Lỗi ở đây không được làm hỏng cả trang: thiếu thì chỉ là không hiện dòng trạng thái.
+        void fetchScriptReadiness(projectId).then(setReadiness).catch(() => setReadiness(null));
 
         // Vào từ màn hình tạo dự án (`?autobuild=1`) thì dựng luôn, đúng một lần. Tham số
         // được xoá khỏi URL trước khi chạy: tải lại trang giữa chừng mà dựng lại từ đầu thì
@@ -658,6 +671,7 @@ function StudioEditor() {
       const result = await importProductLink(projectId);
       setProject(result.project);
       setAssets(await fetchAssets(projectId));
+      setReadiness(await fetchScriptReadiness(projectId).catch(() => null));
       setSaveState("saved");
 
       if (result.crawl.status === "failed") {
@@ -872,13 +886,16 @@ function StudioEditor() {
             onLayoutCommit={commitLayout}
             busy={busy}
             importing={importing}
+            readiness={readiness}
             onProductChange={(patch) =>
               setProject({ ...project, product: { ...project.product, ...patch } })
             }
-            onProductCommit={(product) =>
+            onProductCommit={(product) => {
               // Sản phẩm không nằm trong ảnh chụp hoàn tác, nên không đẩy vào lịch sử.
-              void run(() => updateProject(projectId, { product }), false)
-            }
+              void run(() => updateProject(projectId, { product }), false).then(() =>
+                fetchScriptReadiness(projectId).then(setReadiness).catch(() => {}),
+              );
+            }}
             onReimport={() => void handleReimport()}
             onDurationChange={setDuration}
             onApplyTemplate={(code) =>

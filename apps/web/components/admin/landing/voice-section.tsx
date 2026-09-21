@@ -9,6 +9,81 @@ import { fetchVoices, previewVoice, type VoiceEntry } from "@/lib/admin/voices-a
 import { AdminButton, AdminCard, AdminSelect, Pill } from "@/components/admin/primitives";
 import { useToast } from "@/components/ui/toast";
 
+const MAX_SHOWCASE_VOICES = 4;
+
+/**
+ * Bốn giọng hiện ở mục "Giọng đọc AI" trên landing.
+ *
+ * Chỉ chọn giọng, **không cho gõ câu thoại riêng**: câu hiện trên thẻ chính là
+ * `sampleText` của giọng đó, tức đúng câu file audio đọc. Cho gõ câu riêng ở đây thì khách
+ * đọc một đằng nghe một nẻo. Muốn đổi câu thì sửa câu thoại mẫu của giọng ở trang danh mục
+ * giọng rồi tạo lại bản nghe thử.
+ *
+ * Để trống = landing tự lấy các giọng đang bật đã có bản nghe thử.
+ */
+function ShowcasePicker({
+  config,
+  onChange,
+  voices,
+}: {
+  config: LandingConfig;
+  onChange: (patch: (current: LandingConfig) => LandingConfig) => void;
+  voices: VoiceEntry[];
+}) {
+  const chosen = config.voice.showcase;
+
+  const setAt = (index: number, voiceId: string) =>
+    onChange((current) => {
+      const next = [...current.voice.showcase];
+
+      if (voiceId === "") {
+        next.splice(index, 1);
+      } else {
+        next[index] = voiceId;
+      }
+
+      return {
+        ...current,
+        // Bỏ trùng: hai thẻ cùng một giọng thì khách nghe hai lần một file.
+        voice: { ...current.voice, showcase: [...new Set(next.filter(Boolean))] },
+      };
+    });
+
+  return (
+    <div className="mt-5 rounded-card border border-line bg-canvas p-4">
+      <p className="text-sm font-semibold text-ink">Mục &quot;Giọng đọc AI&quot; trên landing</p>
+      <p className="mt-1 text-xs text-muted">
+        Chọn tối đa {MAX_SHOWCASE_VOICES} giọng. Câu hiển thị trên thẻ lấy từ câu thoại mẫu
+        của chính giọng đó — đúng câu khách sẽ nghe. Để trống thì landing tự lấy các giọng
+        đang bật đã có bản nghe thử.
+      </p>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: MAX_SHOWCASE_VOICES }, (_, index) => (
+          <label key={index} className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+              Thẻ {index + 1}
+            </span>
+            <AdminSelect
+              ariaLabel={`Giọng cho thẻ ${index + 1}`}
+              value={chosen[index] ?? ""}
+              onChange={(value) => setAt(index, value)}
+              options={[
+                { id: "", label: "— Tự chọn —" },
+                ...voices.map((voice) => ({
+                  id: voice.id,
+                  label: `${voice.personaName} · ${voice.region}`,
+                })),
+              ]}
+              className="w-full"
+            />
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Cấu hình giọng cho ba điểm chạm âm thanh trên landing.
  *
@@ -95,6 +170,8 @@ export function VoiceSection({
           {error}
         </p>
       ) : null}
+
+      <ShowcasePicker config={config} onChange={onChange} voices={voices} />
 
       <div className="mt-5 grid gap-4 xl:grid-cols-3">
         {VOICE_SLOTS.map((slot) => {

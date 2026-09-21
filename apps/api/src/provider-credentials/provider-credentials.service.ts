@@ -260,6 +260,24 @@ export class ProviderCredentialsService {
     return this.view(spec, saved);
   }
 
+  /**
+   * Gọi thử credential đang lưu của một nhà cung cấp, **không ghi gì**.
+   *
+   * Dùng cho luồng xác minh model: model chỉ muốn biết nhà cung cấp có chấp nhận credential
+   * hay không, còn trạng thái của credential thì do `test()` quản.
+   */
+  async verifyStored(provider: string): Promise<{
+    label: string;
+    latencyMs: number;
+    metadata: Record<string, unknown>;
+  }> {
+    const spec = this.spec(provider);
+    const { payload } = await this.loadPayload(spec.id);
+    const result = await spec.verify(payload);
+
+    return { label: spec.label, ...result };
+  }
+
   /** Kiểm tra lại credential đang lưu, cập nhật trạng thái và latency. */
   async test(provider: string, ip: string | null): Promise<CredentialStatusView> {
     const spec = this.spec(provider);

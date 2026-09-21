@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { Public } from '../auth/public.decorator.js';
 import { BusinessException } from '../common/exceptions/business.exception.js';
@@ -77,5 +86,16 @@ export class LandingConfigController {
     }
 
     return this.settings.voicePreview(slot);
+  }
+
+  /** Bốn giọng cho mục "Giọng đọc AI" — chỉ giọng đang bật và đã có bản nghe thử. */
+  @Get('voices')
+  async voices() {
+    return { items: await this.settings.showcaseVoices() };
+  }
+
+  @Get('voices/:id/preview')
+  async voiceSample(@Param('id', ParseUUIDPipe) id: string) {
+    return this.settings.showcasePreview(id);
   }
 }

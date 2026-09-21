@@ -174,7 +174,12 @@ describe('ProviderCredentialsService.getStatus', () => {
 });
 
 describe('ProviderCredentialsService — nhà cung cấp dùng API key', () => {
-  const KEY = 'AIzaSyB1234567890abcdefghijklmnopqrstu';
+  /**
+   * Khoá đời mới của Google AI Studio (*auth key*) bắt đầu bằng `AQ.Ab`, khác hẳn khoá cũ
+   * `AIza`. Từ 28/05/2026 mọi khoá tạo mới đều theo dạng này, nên **cả hai đời đều phải
+   * nhận được** — validator không khoá theo tiền tố.
+   */
+  const KEY = 'AQ.Ab8RN6J1234567890abcdefghijklmnopqrstu';
 
   it('lưu khoá dưới dạng ciphertext và chỉ trả về gợi ý đã che', async () => {
     const context = build();
@@ -185,7 +190,7 @@ describe('ProviderCredentialsService — nhà cung cấp dùng API key', () => {
       provider: 'google-gemini',
       type: 'api_key',
       configured: true,
-      displayHint: 'AIza…rstu',
+      displayHint: 'AQ.A…rstu',
       projectId: null,
       clientEmailMasked: null,
     });
@@ -197,11 +202,28 @@ describe('ProviderCredentialsService — nhà cung cấp dùng API key', () => {
     expect(JSON.stringify(context.audit.mock.calls[0]![0])).not.toContain(KEY);
   });
 
-  it('khoá sai hình dạng thì dừng trước khi gọi nhà cung cấp', async () => {
+  it('vẫn nhận khoá đời cũ bắt đầu bằng AIza', async () => {
+    const context = build();
+
+    const view = await context.service.upload(
+      'google-gemini',
+      { value: 'AIzaSyB1234567890abcdefghijklmnopqrstu' },
+      null,
+    );
+
+    expect(view.displayHint).toBe('AIza…rstu');
+  });
+
+  it.each([
+    ['dán nhầm cả câu', 'khoá của tôi là AQ.Ab8RN6J1234567890abcdefghij'],
+    ['dính xuống dòng', 'AQ.Ab8RN6J1234567890abcdefghij\nAQ.Ab'],
+    ['quá ngắn', 'AQ.Ab123'],
+    ['dán nhầm JSON service account', '{"type":"service_account","project_id":"x"}'],
+  ])('chặn %s trước khi gọi nhà cung cấp', async (_label, value) => {
     const context = build();
 
     await expect(
-      context.service.upload('google-gemini', { value: 'khong-phai-khoa' }, null),
+      context.service.upload('google-gemini', { value }, null),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
 
     expect(context.verifyGemini).not.toHaveBeenCalled();

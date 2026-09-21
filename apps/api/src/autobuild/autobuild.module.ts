@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AiModelsModule } from '../ai-models/ai-models.module.js';
 import { CrawlerModule } from '../crawler/crawler.module.js';
 import { MediaModule } from '../media/media.module.js';
 import { ProjectsModule } from '../projects/projects.module.js';
@@ -15,7 +16,14 @@ import { SCRIPT_PROVIDER, TemplateScriptProvider } from './script-provider.js';
  * dùng LLM là xong, không đụng tới service điều phối.
  */
 @Module({
-  imports: [ProjectsModule, MediaModule, CrawlerModule, VoicesModule, TtsModule],
+  imports: [
+    ProjectsModule,
+    MediaModule,
+    CrawlerModule,
+    VoicesModule,
+    TtsModule,
+    AiModelsModule,
+  ],
   controllers: [AutobuildController],
   providers: [
     AutobuildService,

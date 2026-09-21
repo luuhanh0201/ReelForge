@@ -14,12 +14,19 @@ const TIMEOUT_MS = 8000;
 const MODELS_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /**
- * Hình dạng khoá của Google AI Studio: `AIza` + 35 ký tự an toàn cho URL.
+ * Hình dạng khoá — **cố ý không kiểm tiền tố**.
  *
- * Kiểm ở đây để **chặn sớm những lỗi rõ ràng** — dán nhầm cả câu, dính khoảng trắng, dán
- * nhầm service account. Khoá đúng hình dạng mà sai thật thì bước gọi thử sẽ loại.
+ * Google vừa đổi định dạng: khoá cũ (*standard key*) bắt đầu bằng `AIza`, khoá mới
+ * (*auth key*) bắt đầu bằng `AQ.Ab`. Từ 28/05/2026 mọi khoá tạo mới trong AI Studio đều là
+ * auth key, và từ tháng 9/2026 API từ chối khoá `AIza` cũ. Google **không công bố** định
+ * dạng khoá ở tài liệu, nên khoá chặt theo tiền tố là tự chuốc lấy việc chặn nhầm khoá hợp
+ * lệ mỗi lần họ đổi — đúng cái vừa xảy ra.
+ *
+ * Ở đây chỉ chặn những thứ chắc chắn sai: chuỗi rỗng, dính khoảng trắng hoặc xuống dòng
+ * (dán nhầm cả câu), ký tự lạ (dán nhầm JSON service account), quá ngắn hoặc quá dài.
+ * Khoá có đúng hình dạng mà sai thật thì **bước gọi thử sẽ loại** — đó mới là chốt chặn.
  */
-const API_KEY_SHAPE = /^AIza[A-Za-z0-9_-]{30,50}$/;
+const API_KEY_SHAPE = /^[A-Za-z0-9._-]{20,200}$/;
 
 /** Google Gemini — credential là một chuỗi API key. */
 @Injectable()
@@ -42,7 +49,8 @@ export class GeminiCredentialSpec implements CredentialProviderSpec {
 
     if (!API_KEY_SHAPE.test(key)) {
       throw new BusinessException('VALIDATION_FAILED', {
-        message: 'API key của Gemini bắt đầu bằng "AIza" và không chứa khoảng trắng',
+        message:
+          'API key không hợp lệ: chỉ gồm chữ, số, dấu chấm, gạch ngang và không chứa khoảng trắng',
       });
     }
 
@@ -56,9 +64,10 @@ export class GeminiCredentialSpec implements CredentialProviderSpec {
       projectId: null,
       clientEmailMasked: null,
       privateKeyIdSuffix: key.slice(-4),
-      // Đầu khoá là tiền tố chung của mọi khoá Google nên không tiết lộ gì; bốn ký tự cuối
-      // vừa đủ để admin phân biệt hai khoá mà không dựng lại được khoá thật.
-      displayHint: `AIza…${key.slice(-4)}`,
+      // Bốn ký tự đầu là tiền tố chung của cả lớp khoá (`AIza`, `AQ.A`...) nên không tiết
+      // lộ gì, và cho admin biết mình đang cầm khoá đời nào; bốn ký tự cuối vừa đủ để phân
+      // biệt hai khoá mà không dựng lại được khoá thật.
+      displayHint: `${key.slice(0, 4)}…${key.slice(-4)}`,
       fingerprintSource: key,
     };
   }

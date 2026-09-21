@@ -100,6 +100,7 @@ export interface AiModel {
 /** Nhà cung cấp có luồng xác minh thật ở backend. */
 export const VERIFIABLE_PROVIDERS = [
   { id: "google-tts", label: "Google Cloud TTS" },
+  { id: "google-gemini", label: "Google Gemini" },
 ] as const;
 
 

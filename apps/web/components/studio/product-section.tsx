@@ -1,12 +1,20 @@
 "use client";
 
-import { CircleCheck, ExternalLink, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import {
+  CircleCheck,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 import {
   PRODUCT_LIMITS,
   SHOP_LABELS,
   type ProductField,
   type ProductInfo,
+  type ScriptReadiness,
 } from "@repo/shared";
 import type { Project } from "@/lib/studio/projects-api";
 
@@ -36,6 +44,7 @@ const inputClass = (warn: boolean) =>
  */
 export function ProductSection({
   project,
+  readiness,
   hasImages,
   busy,
   importing,
@@ -44,6 +53,11 @@ export function ProductSection({
   onReimport,
 }: {
   project: Project;
+  /**
+   * Đã đủ dữ liệu để gọi AI viết kịch bản chưa. Do máy chủ tính, giao diện chỉ hiển thị —
+   * hai bên đoán riêng thì sớm muộn cũng nói khác nhau.
+   */
+  readiness: ScriptReadiness | null;
   /** Dự án đã có ảnh hay chưa — tải tay lên rồi thì thôi nhắc thiếu ảnh. */
   hasImages: boolean;
   busy: boolean;
@@ -172,6 +186,25 @@ export function ProductSection({
           )}`}
         />
       </label>
+
+      {/*
+        Nói thẳng đã đủ dữ liệu cho AI chưa. Mục đích không phải trang trí: thiếu giá mà vẫn
+        gọi mô hình thì nó sẽ tự bịa một con số, và con số đó đi thẳng lên video bán hàng.
+      */}
+      {readiness ? (
+        <p
+          className={`flex items-start gap-1.5 rounded-btn px-2.5 py-1.5 text-[11px] leading-relaxed ${
+            readiness.ready ? "bg-mint/10 text-mint" : "bg-amber/10 text-amber"
+          }`}
+        >
+          {readiness.ready ? (
+            <Sparkles size={13} className="mt-px shrink-0" />
+          ) : (
+            <TriangleAlert size={13} className="mt-px shrink-0" />
+          )}
+          <span>{readiness.reason}</span>
+        </p>
+      ) : null}
 
       <p className="text-[11px] leading-relaxed text-muted">
         Tên và giá được chèn vào mẫu kịch bản bên dưới. Sửa xong thì chọn lại mẫu để cập nhật

@@ -3,6 +3,7 @@ import { BusinessException } from '../common/exceptions/business.exception.js';
 import type { CrawlerService } from '../crawler/crawler.service.js';
 import type { MediaService } from '../media/media.service.js';
 import type { Project, ProjectLine } from '../projects/project.entity.js';
+import type { AiModelsService } from '../ai-models/ai-models.service.js';
 import type { ProjectsService } from '../projects/projects.service.js';
 import type { ProjectVoiceService } from '../tts/project-voice.service.js';
 import type { VoicesService } from '../voices/voices.service.js';
@@ -24,6 +25,8 @@ const build = (options: {
   project?: Partial<Project>;
   assets?: { id: string }[];
   voices?: { id: string; personaName: string }[];
+  /** Có model kịch bản đang bật hay không — điều kiện của cổng chặn gọi AI. */
+  scriptModel?: boolean;
   onSpeech?: () => Promise<never>;
   onImport?: () => Promise<never>;
 } = {}) => {
@@ -91,8 +94,13 @@ const build = (options: {
     writeScript: vi.fn(async () => projects.applyTemplate()),
   };
 
+  const models = {
+    hasUsableModel: vi.fn(async () => options.scriptModel ?? false),
+  };
+
   const service = new AutobuildService(
     projects as unknown as ProjectsService,
+    models as unknown as AiModelsService,
     media as unknown as MediaService,
     crawler as unknown as CrawlerService,
     voices as unknown as VoicesService,
@@ -100,7 +108,7 @@ const build = (options: {
     script,
   );
 
-  return { service, projects, media, crawler, voices, voice, script, project };
+  return { service, projects, media, crawler, voices, voice, script, models, project };
 };
 
 const statuses = (steps: { step: AutobuildStep; status: string }[]) =>
@@ -247,5 +255,53 @@ describe('AutobuildService.run', () => {
     const few = build({ assets: [{ id: 'a0' }] });
     await few.service.run('p1', 'u1');
     expect(vi.mocked(few.script.writeScript).mock.calls[0]?.[2].durationSec).toBe(30);
+  });
+});
+
+describe('AutobuildService — cổng chặn gọi AI', () => {
+  const ready = {
+    project: {
+      product: { name: 'Tai nghe K29', price: '136.374đ', description: 'x'.repeat(60) },
+    } as Partial<Project>,
+    scriptModel: true,
+  };
+
+  it('đủ dữ liệu và đã bật model thì báo sẵn sàng', async () => {
+    const { service } = build(ready);
+
+    const result = await service.run('p1', 'u1');
+
+    expect(result.readiness.ready).toBe(true);
+  });
+
+  it('thiếu giá thì chặn, và nói rõ trong bước kịch bản', async () => {
+    const { service } = build({
+      ...ready,
+      project: { product: { name: 'Tai nghe K29' } } as Partial<Project>,
+    });
+
+    const result = await service.run('p1', 'u1');
+
+    expect(result.readiness.ready).toBe(false);
+    expect(result.readiness.missing).toContain('price');
+    expect(result.steps.find((item) => item.step === 'script')?.detail).toContain(
+      'còn thiếu giá bán',
+    );
+  });
+
+  it('chưa bật model kịch bản cũng là chưa sẵn sàng', async () => {
+    const { service } = build({ ...ready, scriptModel: false });
+
+    const result = await service.run('p1', 'u1');
+
+    expect(result.readiness.missing).toEqual(['model']);
+  });
+
+  it('kịch bản dựng bằng mẫu thì bước đó nói rõ là bộ mẫu', async () => {
+    const { service } = build(ready);
+
+    const result = await service.run('p1', 'u1');
+
+    expect(result.steps.find((item) => item.step === 'script')?.detail).toContain('bộ mẫu');
   });
 });

@@ -17,6 +17,14 @@ export interface LandingVoiceConfig {
   studio: VoiceSlotConfig;
   /** Khu vực đánh giá có thêm tốc độ đọc riêng. */
   testimonial: VoiceSlotConfig & { speed: number };
+  /**
+   * Các giọng hiện ở mục "Giọng đọc AI" của landing — tối đa 4, theo đúng thứ tự thẻ.
+   *
+   * Chỉ lưu `voiceId`: câu thoại hiện trên thẻ lấy thẳng từ `voices.sample_text`, đúng câu
+   * mà bản audio đọc. Cho admin gõ câu riêng ở đây thì chữ và tiếng sẽ lệch nhau, vì bản
+   * nghe thử đã tổng hợp sẵn theo câu của giọng.
+   */
+  showcase: string[];
 }
 
 export interface LandingThemeConfig {
@@ -55,6 +63,9 @@ const invalid = (message: string): BusinessException =>
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
+/** Mục "Giọng đọc AI" trên landing có 4 thẻ. */
+export const MAX_SHOWCASE_VOICES = 4;
+
 const asRecord = (input: unknown, field: string): Record<string, unknown> => {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw invalid(`Trường "${field}" phải là một object`);
@@ -87,6 +98,21 @@ const voiceSlot = (value: unknown, field: string): VoiceSlotConfig => {
     voiceId: text(source.voiceId, `${field}.voiceId`, 40),
     sampleText: text(source.sampleText, `${field}.sampleText`, 300),
   };
+};
+
+/** Tối đa 4 giọng, bỏ trùng và bỏ ô trống — số thẻ trên landing là 4. */
+const showcaseVoices = (value: unknown, fallback: string[]): string[] => {
+  if (!Array.isArray(value)) return fallback;
+
+  const unique = [
+    ...new Set(
+      value
+        .map((item, index) => text(item, `voice.showcase[${index}]`, 40))
+        .filter((item) => item !== ''),
+    ),
+  ];
+
+  return unique.slice(0, MAX_SHOWCASE_VOICES);
 };
 
 /**
@@ -136,6 +162,7 @@ export const parseLandingConfig = (
       hero: voiceSlot(voice.hero, 'voice.hero'),
       studio: voiceSlot(voice.studio, 'voice.studio'),
       testimonial: { ...voiceSlot(voice.testimonial, 'voice.testimonial'), speed },
+      showcase: showcaseVoices(voice.showcase, fallback.voice.showcase),
     },
     theme: {
       brandHex,

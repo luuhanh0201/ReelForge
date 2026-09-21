@@ -1,5 +1,6 @@
 import type {
   Crop,
+  ScriptReadiness,
   FrameLayouts,
   ProductCrawl,
   ProductInfo,
@@ -163,10 +164,19 @@ export interface AutobuildStepReport {
  * Luôn trả về bình thường kèm báo cáo từng bước — bước hỏng (sàn chặn, hết hạn mức lồng
  * tiếng) không phải lỗi của lệnh gọi, và phần đã dựng được vẫn dùng tiếp được.
  */
+/** Đã đủ dữ liệu để gọi AI viết kịch bản chưa — máy chủ quyết, giao diện chỉ hiển thị. */
+export const fetchScriptReadiness = (id: string): Promise<ScriptReadiness> =>
+  request(`/projects/${id}/autobuild/readiness`);
+
 export const autobuildProject = (
   id: string,
   input: { force?: boolean; templateCode?: string; durationSec?: number } = {},
-): Promise<{ project: Project; clips: VoiceClipView[]; steps: AutobuildStepReport[] }> =>
+): Promise<{
+  project: Project;
+  clips: VoiceClipView[];
+  steps: AutobuildStepReport[];
+  readiness: ScriptReadiness;
+}> =>
   request(`/projects/${id}/autobuild`, {
     method: "POST",
     body: JSON.stringify(input),

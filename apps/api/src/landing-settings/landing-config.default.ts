@@ -22,6 +22,8 @@ export const DEFAULT_LANDING_CONFIG: LandingConfig = {
       sampleText: 'Mình tăng gấp ba đơn hàng affiliate chỉ sau hai tuần dùng ReelForge.',
       speed: 1.05,
     },
+    // Rỗng = landing tự lấy các giọng đang bật đã có bản nghe thử, theo thứ tự danh mục.
+    showcase: [],
   },
   theme: {
     brandHex: '#ff6b35',

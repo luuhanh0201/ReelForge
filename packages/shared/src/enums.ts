@@ -53,8 +53,35 @@ export const CREDIT_TX_TYPES = [
   "purchase",
   "render_charge",
   "tts_extra",
+  /** Trừ khi sinh một clip bằng AI — tính theo giây, không phải theo lần xuất. */
+  "ai_clip_charge",
   "refund",
   "admin_grant",
   "admin_deduct",
 ] as const;
 export type CreditTxType = (typeof CREDIT_TX_TYPES)[number];
+
+/**
+ * Các kiểu sinh video bằng AI.
+ *
+ * `image_to_video` giữ đúng sản phẩm vì đầu vào là ảnh thật — quan trọng nhất với affiliate.
+ * `text_to_video` chỉ hợp cho cảnh hook và b-roll. `avatar` trả về clip **kèm tiếng riêng**
+ * nên cảnh đó không dùng giọng của hệ thống.
+ */
+export const GENERATION_KINDS = ["image_to_video", "text_to_video", "avatar"] as const;
+export type GenerationKind = (typeof GENERATION_KINDS)[number];
+
+export const GENERATION_KIND_LABELS: Record<GenerationKind, string> = {
+  image_to_video: "Làm động ảnh sản phẩm",
+  text_to_video: "Cảnh quay AI",
+  avatar: "Người mẫu ảo",
+};
+
+export const GENERATION_STATUSES = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "canceled",
+] as const;
+export type GenerationStatus = (typeof GENERATION_STATUSES)[number];

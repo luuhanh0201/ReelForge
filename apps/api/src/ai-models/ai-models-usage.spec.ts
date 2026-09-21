@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Repository } from 'typeorm';
 import type { AuditLogService } from '../audit/audit-log.service.js';
-import type { GoogleTtsCredentialVerifierService } from '../provider-credentials/google-tts-credential-verifier.service.js';
 import type { ProviderCredentialsService } from '../provider-credentials/provider-credentials.service.js';
 import type { TtsUsageService } from '../tts-usage/tts-usage.service.js';
 import type { Voice } from '../voices/voice.entity.js';
@@ -56,7 +55,6 @@ const build = (models: AiModel[], usage: { modelId: string; total: string }[]) =
     repository,
     voices,
     {} as ProviderCredentialsService,
-    {} as GoogleTtsCredentialVerifierService,
     {} as TtsUsageService,
     {} as AuditLogService,
   );

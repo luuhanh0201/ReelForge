@@ -108,6 +108,29 @@ const GENDER_BY_SSML: Record<string, VoiceGender> = {
 const invalid = (message: string): BusinessException =>
   new BusinessException('VALIDATION_FAILED', { message });
 
+/**
+ * Khoá cache bản nghe thử.
+ *
+ * Cố ý **không gồm tốc độ**: audio luôn tổng hợp ở 1.0x, tốc độ do trình duyệt áp bằng
+ * `playbackRate`, nhờ vậy đổi tốc độ không tốn thêm ký tự nào. Có gồm **câu thoại**, nên
+ * sửa câu là bản cũ tự hết hiệu lực.
+ */
+const previewInputHash = (
+  voice: { providerVoiceId: string; sampleText: string },
+  config: VoiceModelConfig,
+): string =>
+  createHash('sha256')
+    .update(
+      [
+        voice.providerVoiceId,
+        voice.sampleText,
+        config.audioEncoding,
+        config.apiVersion,
+        config.defaultPitch,
+      ].join('|'),
+    )
+    .digest('hex');
+
 @Injectable()
 export class VoicesService {
   private readonly logger = new Logger(VoicesService.name);
@@ -271,6 +294,41 @@ export class VoicesService {
    * TTS sẽ phình theo số lần thử chứ không theo số video làm ra. Chưa có bản nào thì trả
    * `null` để giao diện ẩn nút, và việc tạo bản nghe thử là thao tác của quản trị viên.
    */
+  /**
+   * Giọng đang bật **và có bản nghe thử còn khớp với câu thoại hiện tại**.
+   *
+   * Khoá cache có băm cả câu thoại, nên sửa câu là bản cũ hết hiệu lực. Nơi nào phát audio
+   * cho người dùng cuối đều phải lọc qua đây, nếu không chữ hiện trên màn hình sẽ nói một
+   * đằng còn tiếng phát ra nói một nẻo.
+   */
+  async previewReadyIds(): Promise<Set<string>> {
+    const [voices, previews, models] = await Promise.all([
+      this.repository.find({ where: { enabled: true } }),
+      this.previews.find(),
+      this.models.find(),
+    ]);
+
+    const byVoice = new Map(previews.map((preview) => [preview.voiceId, preview]));
+    const configs = new Map(
+      models.map((model) => [
+        model.id,
+        readModelConfig('voice', model.config) as VoiceModelConfig,
+      ]),
+    );
+
+    const ready = new Set<string>();
+
+    for (const voice of voices) {
+      const preview = byVoice.get(voice.id);
+      const config = configs.get(voice.modelId);
+      if (!preview || !config) continue;
+
+      if (preview.inputHash === previewInputHash(voice, config)) ready.add(voice.id);
+    }
+
+    return ready;
+  }
+
   async cachedPreview(
     id: string,
   ): Promise<{ audioBase64: string; mimeType: string; sampleText: string } | null> {
@@ -539,17 +597,7 @@ export class VoicesService {
      * Khoá cache cố ý KHÔNG gồm tốc độ: audio luôn tổng hợp ở 1.0x, tốc độ do trình
      * duyệt áp bằng playbackRate. Nhờ vậy đổi tốc độ không tốn thêm ký tự nào.
      */
-    const inputHash = createHash('sha256')
-      .update(
-        [
-          voice.providerVoiceId,
-          voice.sampleText,
-          config.audioEncoding,
-          config.apiVersion,
-          config.defaultPitch,
-        ].join('|'),
-      )
-      .digest('hex');
+    const inputHash = previewInputHash(voice, config);
 
     const cached = await this.previews.findOne({ where: { voiceId: voice.id } });
 

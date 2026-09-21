@@ -19,6 +19,7 @@ import {
   type AspectRatio,
   type FrameLayout,
   type ProductInfo,
+  type ScriptReadiness,
   type SubtitleStyle,
 } from "@repo/shared";
 import {
@@ -71,6 +72,7 @@ export function SubtitlePanel({
   subtitle,
   busy,
   importing,
+  readiness,
   onProductChange,
   onProductCommit,
   onReimport,
@@ -107,6 +109,8 @@ export function SubtitlePanel({
   busy: boolean;
   /** Đang đọc lại link sản phẩm. */
   importing: boolean;
+  /** Đủ dữ liệu để gọi AI viết kịch bản chưa; `null` khi chưa hỏi được máy chủ. */
+  readiness: ScriptReadiness | null;
   onProductChange: (patch: Partial<ProductInfo>) => void;
   onProductCommit: (product: Partial<ProductInfo>) => void;
   onReimport: () => void;
@@ -174,6 +178,7 @@ export function SubtitlePanel({
             duration={duration}
             busy={busy}
             importing={importing}
+            readiness={readiness}
             onProductChange={onProductChange}
             onProductCommit={onProductCommit}
             onReimport={onReimport}
@@ -251,6 +256,7 @@ function ContentTab({
   duration,
   busy,
   importing,
+  readiness,
   onProductChange,
   onProductCommit,
   onReimport,
@@ -271,6 +277,7 @@ function ContentTab({
   duration: number;
   busy: boolean;
   importing: boolean;
+  readiness: ScriptReadiness | null;
   onProductChange: (patch: Partial<ProductInfo>) => void;
   onProductCommit: (product: Partial<ProductInfo>) => void;
   onReimport: () => void;
@@ -301,6 +308,7 @@ function ContentTab({
       <Section title="Sản phẩm">
         <ProductSection
           project={project}
+          readiness={readiness}
           hasImages={assets.length > 0}
           busy={busy}
           importing={importing}

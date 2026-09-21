@@ -709,7 +709,13 @@ function ModelCard({
         {model.usedByVoices > 0 ? (
           <span className="text-mint">Đang dùng cho {model.usedByVoices} giọng</span>
         ) : model.enabled ? (
-          "Đang bật · chưa có giọng nào dùng"
+          // Chỉ model giọng đọc mới đếm được qua `voices`; model kịch bản và video thì
+          // "chưa có giọng nào dùng" là câu vô nghĩa.
+          model.kind === "voice" ? (
+            "Đang bật · chưa có giọng nào dùng"
+          ) : (
+            <span className="text-mint">Đang bật</span>
+          )
         ) : (
           "Chưa nối vào sản phẩm"
         )}
